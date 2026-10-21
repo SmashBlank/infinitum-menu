@@ -16,6 +16,7 @@
       <a href="menu-view.html" id="preview-link" target="_blank">Preview public menu ↗</a>
     </nav>
     <div class="nav-actions">
+      <button class="btn btn-ghost btn-sm" id="theme-toggle-btn">🎨 Theme</button>
       <span class="role-pill" id="role-pill">Role</span>
     </div>
     <button class="nav-toggle" aria-label="Toggle menu"><span></span><span></span><span></span></button>
@@ -34,6 +35,12 @@
     </div>
   </div>
 
+  <div class="card card-pad hidden" id="theme-card" style="margin-bottom:28px;">
+    <h3 style="margin-bottom:4px; font-size:1rem;">Logo &amp; color theme</h3>
+    <p class="muted" style="font-size:0.82rem;">Upload a logo, pick any color, or fine-tune a shade — available to both admins and restaurant owners.</p>
+    <div id="theme-panel"></div>
+  </div>
+
   <div class="category-strip" id="category-strip"></div>
 
   <div id="categories-container"></div>
@@ -50,6 +57,7 @@
 
 <script src="js/menuData.js"></script>
 <script src="js/theme.js"></script>
+<script src="js/themePanel.js"></script>
 <script src="js/main.js"></script>
 <script src="js/editMenu.js"></script>
 </body>

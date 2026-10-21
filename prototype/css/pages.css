@@ -118,6 +118,20 @@
 .swatch-row { display: flex; gap: 8px; margin-top: 10px; }
 .swatch { width: 22px; height: 22px; border-radius: 6px; border: 1px solid rgba(0,0,0,.08); }
 
+.color-swatch-input {
+  width: 46px; height: 36px; padding: 0; border: 1px solid var(--border); border-radius: 10px;
+  cursor: pointer; background: none;
+}
+.color-swatch-input::-webkit-color-swatch-wrapper { padding: 3px; }
+.color-swatch-input::-webkit-color-swatch { border: none; border-radius: 7px; }
+.shade-row { display: flex; gap: 8px; }
+.shade-swatch {
+  width: 32px; height: 32px; border-radius: 9px; border: 2px solid transparent; cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); transition: transform .12s ease, border-color .12s ease;
+}
+.shade-swatch:hover { transform: translateY(-2px); }
+.shade-swatch.active { border-color: var(--text); }
+
 /* ---------- Edit menu (e_mode) ---------- */
 .editor-toolbar {
   display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;

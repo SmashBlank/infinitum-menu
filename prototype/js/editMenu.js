@@ -28,10 +28,19 @@
   document.getElementById("preview-link").href = `menu-view.html?r=${restaurantId}`;
   document.getElementById("back-link").href =
     role === "admin" ? "admin-dashboard.html" : `restaurant-dashboard.html?r=${restaurantId}`;
-  Theme.ensureTheme(restaurantId, restaurant.logo);
   const rolePill = document.getElementById("role-pill");
   rolePill.textContent = role === "admin" ? "Admin — full access" : "Restaurant owner";
   if (role === "admin") rolePill.classList.add("is-admin");
+
+  const themeCard = document.getElementById("theme-card");
+  document.getElementById("theme-toggle-btn").addEventListener("click", () => {
+    themeCard.classList.toggle("hidden");
+  });
+  Theme.ensureTheme(restaurantId, restaurant.logo, (vars, hsl) => {
+    mountThemePanel(document.getElementById("theme-panel"), restaurantId, restaurant, { vars, hsl }, {
+      onChange: () => persist()
+    });
+  });
 
   function persist() {
     DataStore.saveRestaurant(restaurantId, restaurant);

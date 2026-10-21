@@ -67,17 +67,8 @@
     <div style="display:flex; flex-direction:column; gap:20px;">
       <div class="card card-pad">
         <h3 style="margin-bottom:4px;">Your logo &amp; color theme</h3>
-        <p class="muted" style="font-size:0.85rem;">Upload your logo and we'll automatically pick a background and accent color to match it — this changes the whole look of your public menu page.</p>
-        <div class="logo-upload-box">
-          <div class="logo-preview" id="logo-preview">
-            <span class="muted" style="font-size:0.72rem;">No logo</span>
-          </div>
-          <div>
-            <input type="file" id="logo-input" accept="image/*">
-            <div class="swatch-row" id="swatch-row"></div>
-          </div>
-        </div>
-        <button class="btn btn-ghost btn-sm mt-16" id="reset-theme-btn">Reset to default colors</button>
+        <p class="muted" style="font-size:0.85rem;">Upload your logo, pick any color yourself, or fine-tune a shade — this changes the whole look of your public menu page.</p>
+        <div id="theme-panel"></div>
       </div>
 
       <div class="card card-pad">
@@ -97,6 +88,7 @@
 
 <script src="js/menuData.js"></script>
 <script src="js/theme.js"></script>
+<script src="js/themePanel.js"></script>
 <script src="js/main.js"></script>
 <script>
   const params = new URLSearchParams(window.location.search);
@@ -119,58 +111,26 @@
     document.getElementById("stat-categories").textContent = restaurant.categories.length;
     document.getElementById("stat-items").textContent = itemCount;
 
-    const logoPreview = document.getElementById("logo-preview");
     const brandLogoImg = document.getElementById("brand-logo");
     const brandDot = document.getElementById("brand-dot");
 
-    function renderLogo(src) {
-      if (!src) return;
-      logoPreview.innerHTML = `<img src="${src}" alt="Logo">`;
-      brandLogoImg.src = src;
+    function renderBrandLogo() {
+      if (!restaurant.logo) return;
+      brandLogoImg.src = restaurant.logo;
       brandLogoImg.style.display = "block";
       brandDot.style.display = "none";
     }
+    renderBrandLogo();
 
-    function renderSwatches(vars) {
-      const row = document.getElementById("swatch-row");
-      row.innerHTML = "";
-      if (!vars) return;
-      ["--accent", "--accent-soft", "--bg-soft"].forEach((key) => {
-        const sw = document.createElement("span");
-        sw.className = "swatch";
-        sw.style.background = vars[key];
-        row.appendChild(sw);
-      });
-    }
-
-    // Load this restaurant's previously saved logo + theme (if any)
-    if (restaurant.logo) renderLogo(restaurant.logo);
-    Theme.ensureTheme(restaurantId, restaurant.logo, (vars) => {
-      renderSwatches(vars || Theme.DEFAULT_VARS);
-    });
-
-    document.getElementById("logo-input").addEventListener("change", (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const dataUrl = ev.target.result;
-        renderLogo(dataUrl);
-        const img = new Image();
-        img.src = dataUrl;
-        Theme.applyFromImage(img, restaurantId, (vars) => {
-          renderSwatches(vars);
-          restaurant.logo = dataUrl;
+    // Load this restaurant's previously saved theme (or derive one from its
+    // seed logo on first visit), then mount the shared logo/color panel.
+    Theme.ensureTheme(restaurantId, restaurant.logo, (vars, hsl) => {
+      mountThemePanel(document.getElementById("theme-panel"), restaurantId, restaurant, { vars, hsl }, {
+        onChange: () => {
+          renderBrandLogo();
           DataStore.saveRestaurant(restaurantId, restaurant);
-        });
-      };
-      reader.readAsDataURL(file);
-    });
-
-    document.getElementById("reset-theme-btn").addEventListener("click", () => {
-      Theme.resetToDefault();
-      localStorage.removeItem(`infinitum_theme_${restaurantId}`);
-      renderSwatches(Theme.DEFAULT_VARS);
+        }
+      });
     });
   }
 </script>
