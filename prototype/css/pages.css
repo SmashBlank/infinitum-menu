@@ -248,14 +248,25 @@
 .menu-nav a:hover, .menu-nav a.active { background: var(--accent); color: var(--accent-contrast); text-decoration: none; }
 
 .public-section { padding: 36px 0; }
-.public-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px; }
-.public-card { overflow: hidden; display: flex; flex-direction: column; }
-.public-card .img-wrap { aspect-ratio: 1.4/1; background: var(--bg-soft); overflow: hidden; }
+.public-card-grid { display: flex; flex-direction: column; gap: 14px; }
+.public-card { overflow: hidden; display: flex; flex-direction: row; align-items: stretch; }
+.public-card .img-wrap {
+  width: 104px; height: 104px; flex-shrink: 0; background: var(--bg-soft); overflow: hidden; border-radius: var(--radius-sm);
+  margin: 12px 0 12px 12px;
+}
 .public-card .img-wrap img { width: 100%; height: 100%; object-fit: cover; }
-.public-card .card-body { padding: 16px; flex: 1; display: flex; flex-direction: column; }
+.public-card .card-body { padding: 14px 16px; flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
 .public-card h3 { font-size: 1rem; margin-bottom: 4px; }
-.public-card .price-line { font-weight: 700; color: var(--accent); font-size: 0.9rem; margin-bottom: 6px; }
-.public-card p { font-size: 0.85rem; margin-bottom: 0; }
+.public-card .price-line { font-weight: 700; color: var(--accent); font-size: 0.9rem; margin-bottom: 4px; }
+.public-card p {
+  font-size: 0.85rem; margin-bottom: 0;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+
+@media (max-width: 480px) {
+  .public-card .img-wrap { width: 84px; height: 84px; margin: 10px 0 10px 10px; }
+  .public-card .card-body { padding: 10px 12px; }
+}
 
 /* ---------- Scan menu ---------- */
 .scan-wrap { max-width: 540px; margin: 0 auto; padding: 36px 20px 60px; }
