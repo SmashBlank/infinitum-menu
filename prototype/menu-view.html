@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Menu — Infinitum</title>
+<link rel="stylesheet" href="css/styles.css">
+<link rel="stylesheet" href="css/pages.css">
+</head>
+<body>
+
+<div class="menu-hero">
+  <div class="container">
+    <div class="logo-circle" id="logo-circle">
+      <span class="muted" style="font-size:0.7rem;">Logo</span>
+    </div>
+    <h1 id="restaurant-name">Restaurant</h1>
+    <p id="restaurant-tagline">Digital menu</p>
+  </div>
+</div>
+
+<nav class="menu-nav" id="menu-nav"></nav>
+
+<main id="menu-sections"></main>
+
+<footer class="site-footer">
+  <div class="container footer-bottom">
+    <span>© <span data-year></span> Infinitum. All rights reserved.</span>
+    <span>Powered by Infinitum</span>
+  </div>
+</footer>
+
+<script src="js/menuData.js"></script>
+<script src="js/theme.js"></script>
+<script src="js/main.js"></script>
+<script>
+  const params = new URLSearchParams(window.location.search);
+  const restaurantId = params.get("r") || "green-leaf-cafe";
+  const restaurant = DataStore.getRestaurant(restaurantId);
+
+  if (!restaurant) {
+    document.getElementById("menu-sections").innerHTML = "<p class='container'>Menu not found.</p>";
+  } else {
+    document.title = `${restaurant.name} — Menu`;
+    document.getElementById("restaurant-name").textContent = restaurant.name;
+    document.getElementById("restaurant-tagline").textContent = `Welcome! Here's what's on our menu today.`;
+
+    // Apply the color theme derived from this restaurant's logo.
+    Theme.ensureTheme(restaurantId, restaurant.logo);
+
+    if (restaurant.logo) {
+      document.getElementById("logo-circle").innerHTML = `<img src="${restaurant.logo}" alt="${restaurant.name} logo">`;
+    }
+
+    const nav = document.getElementById("menu-nav");
+    const sections = document.getElementById("menu-sections");
+
+    restaurant.categories.forEach((cat, idx) => {
+      const link = document.createElement("a");
+      link.href = `#section-${cat.id}`;
+      link.textContent = cat.name;
+      if (idx === 0) link.classList.add("active");
+      nav.appendChild(link);
+
+      const section = document.createElement("section");
+      section.className = "public-section";
+      section.id = `section-${cat.id}`;
+      section.innerHTML = `
+        <div class="container">
+          <h2 style="margin-bottom:20px;">${cat.name}</h2>
+          <div class="public-card-grid">
+            ${cat.items.map((item) => `
+              <div class="card public-card">
+                <div class="img-wrap"><img src="${DataStore.resolvedImage(item)}" alt="${item.name}"></div>
+                <div class="card-body">
+                  <h3>${item.name}</h3>
+                  <div class="price-line">${DataStore.formatPrice(item)}</div>
+                  <p>${DataStore.resolvedDescription(item)}</p>
+                </div>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+      `;
+      sections.appendChild(section);
+    });
+
+    // Highlight the active nav link based on scroll position.
+    const navLinks = Array.from(nav.querySelectorAll("a"));
+    const sectionEls = restaurant.categories.map((c) => document.getElementById(`section-${c.id}`));
+    window.addEventListener("scroll", () => {
+      let activeIdx = 0;
+      sectionEls.forEach((el, i) => {
+        if (el.getBoundingClientRect().top - 120 <= 0) activeIdx = i;
+      });
+      navLinks.forEach((l, i) => l.classList.toggle("active", i === activeIdx));
+    });
+  }
+</script>
+</body>
+</html>

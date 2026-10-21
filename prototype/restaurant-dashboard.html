@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Restaurant dashboard — Infinitum</title>
+<link rel="stylesheet" href="css/styles.css">
+<link rel="stylesheet" href="css/pages.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="container nav-row">
+    <a href="#" class="brand">
+      <img id="brand-logo" src="assets/images/default-dish.svg" alt="" style="display:none;">
+      <span class="brand-dot" id="brand-dot"></span>
+      <span id="brand-name">Infinitum</span>
+    </a>
+    <nav class="nav-links">
+      <a href="#" class="active">Dashboard</a>
+    </nav>
+    <div class="nav-actions">
+      <a href="#" id="edit-menu-link" class="btn btn-primary btn-sm">Edit my menu</a>
+      <a href="login.html" class="btn btn-ghost btn-sm">Log out</a>
+    </div>
+    <button class="nav-toggle" aria-label="Toggle menu"><span></span><span></span><span></span></button>
+  </div>
+</header>
+
+<main class="container dash-header">
+  <div class="dash-title-row">
+    <h1 id="page-title">Your menu dashboard</h1>
+    <a href="#" id="view-menu-link" class="btn btn-outline btn-sm" target="_blank">View public menu ↗</a>
+  </div>
+
+  <div class="dash-grid">
+    <div style="display:flex; flex-direction:column; gap:20px;">
+      <div class="card card-pad profile-card">
+        <div class="profile-avatar" id="profile-avatar"></div>
+        <div class="profile-meta">
+          <h3 id="profile-name">—</h3>
+          <p class="muted" id="profile-plan">—</p>
+        </div>
+      </div>
+
+      <div class="card card-pad">
+        <h3 style="margin-bottom:6px;">Your menu</h3>
+        <p class="muted" style="font-size:0.88rem;">Add categories, add dishes, edit descriptions and reorder items — all from one editor page.</p>
+        <a href="#" id="edit-menu-link-2" class="btn btn-primary btn-sm">Open menu editor</a>
+      </div>
+
+      <div class="card card-pad">
+        <h3 style="margin-bottom:12px;">Overview</h3>
+        <div class="stat-row">
+          <div class="stat-box">
+            <div class="num" id="stat-categories">0</div>
+            <div class="label">Categories</div>
+          </div>
+          <div class="stat-box">
+            <div class="num" id="stat-items">0</div>
+            <div class="label">Items</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:20px;">
+      <div class="card card-pad">
+        <h3 style="margin-bottom:4px;">Your logo &amp; color theme</h3>
+        <p class="muted" style="font-size:0.85rem;">Upload your logo and we'll automatically pick a background and accent color to match it — this changes the whole look of your public menu page.</p>
+        <div class="logo-upload-box">
+          <div class="logo-preview" id="logo-preview">
+            <span class="muted" style="font-size:0.72rem;">No logo</span>
+          </div>
+          <div>
+            <input type="file" id="logo-input" accept="image/*">
+            <div class="swatch-row" id="swatch-row"></div>
+          </div>
+        </div>
+        <button class="btn btn-ghost btn-sm mt-16" id="reset-theme-btn">Reset to default colors</button>
+      </div>
+
+      <div class="card card-pad">
+        <h3 style="margin-bottom:8px;">Need help?</h3>
+        <p class="muted" style="font-size:0.85rem;">This is a prototype account. Camera-based menu scanning, real billing, and plan upgrades will appear here once the backend is connected.</p>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer class="site-footer">
+  <div class="container footer-bottom">
+    <span>© <span data-year></span> Infinitum. All rights reserved.</span>
+    <span>Prototype build — not yet connected to a live database.</span>
+  </div>
+</footer>
+
+<script src="js/menuData.js"></script>
+<script src="js/theme.js"></script>
+<script src="js/main.js"></script>
+<script>
+  const params = new URLSearchParams(window.location.search);
+  const restaurantId = params.get("r") || "green-leaf-cafe";
+  const restaurant = DataStore.getRestaurant(restaurantId);
+
+  if (!restaurant) {
+    document.querySelector("main").innerHTML = "<p>Unknown restaurant.</p>";
+  } else {
+    document.title = `${restaurant.name} — Infinitum`;
+    document.getElementById("page-title").textContent = `${restaurant.name} — menu dashboard`;
+    document.getElementById("profile-name").textContent = restaurant.name;
+    document.getElementById("profile-plan").textContent = restaurant.plan;
+    document.getElementById("brand-name").textContent = restaurant.name;
+    document.getElementById("edit-menu-link").href = `edit-menu.html?r=${restaurantId}&role=restaurant`;
+    document.getElementById("edit-menu-link-2").href = `edit-menu.html?r=${restaurantId}&role=restaurant`;
+    document.getElementById("view-menu-link").href = `menu-view.html?r=${restaurantId}`;
+
+    const itemCount = restaurant.categories.reduce((sum, c) => sum + c.items.length, 0);
+    document.getElementById("stat-categories").textContent = restaurant.categories.length;
+    document.getElementById("stat-items").textContent = itemCount;
+
+    const logoPreview = document.getElementById("logo-preview");
+    const brandLogoImg = document.getElementById("brand-logo");
+    const brandDot = document.getElementById("brand-dot");
+
+    function renderLogo(src) {
+      if (!src) return;
+      logoPreview.innerHTML = `<img src="${src}" alt="Logo">`;
+      brandLogoImg.src = src;
+      brandLogoImg.style.display = "block";
+      brandDot.style.display = "none";
+    }
+
+    function renderSwatches(vars) {
+      const row = document.getElementById("swatch-row");
+      row.innerHTML = "";
+      if (!vars) return;
+      ["--accent", "--accent-soft", "--bg-soft"].forEach((key) => {
+        const sw = document.createElement("span");
+        sw.className = "swatch";
+        sw.style.background = vars[key];
+        row.appendChild(sw);
+      });
+    }
+
+    // Load this restaurant's previously saved logo + theme (if any)
+    if (restaurant.logo) renderLogo(restaurant.logo);
+    Theme.ensureTheme(restaurantId, restaurant.logo, (vars) => {
+      renderSwatches(vars || Theme.DEFAULT_VARS);
+    });
+
+    document.getElementById("logo-input").addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const dataUrl = ev.target.result;
+        renderLogo(dataUrl);
+        const img = new Image();
+        img.src = dataUrl;
+        Theme.applyFromImage(img, restaurantId, (vars) => {
+          renderSwatches(vars);
+          restaurant.logo = dataUrl;
+          DataStore.saveRestaurant(restaurantId, restaurant);
+        });
+      };
+      reader.readAsDataURL(file);
+    });
+
+    document.getElementById("reset-theme-btn").addEventListener("click", () => {
+      Theme.resetToDefault();
+      localStorage.removeItem(`infinitum_theme_${restaurantId}`);
+      renderSwatches(Theme.DEFAULT_VARS);
+    });
+  }
+</script>
+</body>
+</html>

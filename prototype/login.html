@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Log in — Infinitum</title>
+<link rel="stylesheet" href="css/styles.css">
+<link rel="stylesheet" href="css/pages.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="container nav-row">
+    <a href="index.html" class="brand"><span class="brand-dot"></span> Infinitum</a>
+    <nav class="nav-links">
+      <a href="index.html">Home</a>
+    </nav>
+    <div class="nav-actions"></div>
+    <button class="nav-toggle" aria-label="Toggle menu"><span></span><span></span><span></span></button>
+  </div>
+</header>
+
+<main class="auth-wrap">
+  <div class="card auth-card">
+    <div class="role-toggle">
+      <button type="button" class="active" data-role="restaurant">Restaurant login</button>
+      <button type="button" data-role="admin">Admin login</button>
+    </div>
+
+    <form id="restaurant-form">
+      <div class="field">
+        <label for="r-select">Choose your restaurant (demo)</label>
+        <select id="r-select">
+          <option value="green-leaf-cafe">Green Leaf Cafe</option>
+          <option value="spice-route">Spice Route</option>
+          <option value="blue-wave-pizza">Blue Wave Pizzeria</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="r-email">Email</label>
+        <input type="email" id="r-email" placeholder="owner@yourcafe.com" value="owner@demo.com">
+      </div>
+      <div class="field">
+        <label for="r-pass">Password</label>
+        <input type="password" id="r-pass" placeholder="••••••••" value="demo1234">
+      </div>
+      <button type="submit" class="btn btn-primary" style="width:100%;">Log in to my menu</button>
+    </form>
+
+    <form id="admin-form" class="hidden">
+      <div class="field">
+        <label for="a-email">Admin email</label>
+        <input type="email" id="a-email" placeholder="admin@infinitum.app" value="admin@infinitum.app">
+      </div>
+      <div class="field">
+        <label for="a-pass">Password</label>
+        <input type="password" id="a-pass" placeholder="••••••••" value="admin1234">
+      </div>
+      <button type="submit" class="btn btn-primary" style="width:100%;">Log in as admin</button>
+    </form>
+
+    <p class="demo-note">This is a design prototype — any email/password works. Real sign-in with proper passwords will be added when we connect a database (see <code>login.html</code> notes for the team).</p>
+  </div>
+</main>
+
+<footer class="site-footer">
+  <div class="container footer-bottom">
+    <span>© <span data-year></span> Infinitum. All rights reserved.</span>
+    <span>Prototype build — not yet connected to a live database.</span>
+  </div>
+</footer>
+
+<script src="js/main.js"></script>
+<script>
+  const restaurantForm = document.getElementById("restaurant-form");
+  const adminForm = document.getElementById("admin-form");
+  const toggleButtons = document.querySelectorAll(".role-toggle button");
+
+  toggleButtons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      toggleButtons.forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      const isAdmin = btn.dataset.role === "admin";
+      adminForm.classList.toggle("hidden", !isAdmin);
+      restaurantForm.classList.toggle("hidden", isAdmin);
+    });
+  });
+
+  restaurantForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const id = document.getElementById("r-select").value;
+    window.location.href = `restaurant-dashboard.html?r=${id}`;
+  });
+
+  adminForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    window.location.href = "admin-dashboard.html";
+  });
+</script>
+</body>
+</html>

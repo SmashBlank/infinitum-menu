@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scan new menu — Infinitum</title>
+<link rel="stylesheet" href="css/styles.css">
+<link rel="stylesheet" href="css/pages.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="container nav-row">
+    <a href="admin-dashboard.html" class="brand"><span class="brand-dot"></span> Infinitum</a>
+    <nav class="nav-links"></nav>
+    <div class="nav-actions">
+      <a href="admin-dashboard.html" class="btn btn-ghost btn-sm">Cancel</a>
+    </div>
+    <button class="nav-toggle" aria-label="Toggle menu"><span></span><span></span><span></span></button>
+  </div>
+</header>
+
+<main class="scan-wrap">
+  <h1 style="font-size:1.3rem;">Scan a new menu</h1>
+  <p class="muted">Click as many photos of the paper menu as you need. Remove any with the ✕, then press Done.</p>
+
+  <div id="camera-stage">
+    <div class="camera-frame">
+      <video id="camera-video" autoplay playsinline muted></video>
+      <div class="camera-placeholder" id="camera-placeholder">
+        📷<br>Camera preview will appear here.<br><span style="font-size:0.78rem;">Needs HTTPS or localhost — see note below.</span>
+      </div>
+    </div>
+    <div class="camera-controls">
+      <button class="btn btn-ghost btn-sm" id="start-camera-btn">Start camera</button>
+      <button class="shutter-btn" id="shutter-btn" title="Capture photo" disabled></button>
+      <label class="btn btn-ghost btn-sm" for="fallback-file-input" style="cursor:pointer;">Upload photo instead</label>
+      <input type="file" id="fallback-file-input" accept="image/*" multiple class="hidden">
+    </div>
+  </div>
+
+  <div class="shots-strip" id="shots-strip"></div>
+
+  <div class="flex gap-12 mt-24" style="justify-content:flex-end;">
+    <button class="btn btn-primary" id="done-btn" disabled>Done — analyze photos</button>
+  </div>
+
+  <div class="analyzing-overlay hidden" id="analyzing-overlay">
+    <div class="spinner"></div>
+    <h3>Reading your menu…</h3>
+    <p class="muted">Finding item names, prices, and categories from your photos.</p>
+  </div>
+
+  <p class="demo-note mt-24">Prototype note: real photo-to-text reading (OCR) isn't wired up yet — this screen simulates it and opens a sample draft menu so you can see the editor flow end-to-end.</p>
+</main>
+
+<footer class="site-footer">
+  <div class="container footer-bottom">
+    <span>© <span data-year></span> Infinitum. All rights reserved.</span>
+  </div>
+</footer>
+
+<script src="js/main.js"></script>
+<script src="js/scan.js"></script>
+</body>
+</html>

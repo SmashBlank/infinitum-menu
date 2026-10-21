@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Menu editor — Infinitum</title>
+<link rel="stylesheet" href="css/styles.css">
+<link rel="stylesheet" href="css/pages.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="container nav-row">
+    <a href="#" id="back-link" class="brand"><span class="brand-dot"></span> <span id="brand-name">Infinitum</span></a>
+    <nav class="nav-links">
+      <a href="menu-view.html" id="preview-link" target="_blank">Preview public menu ↗</a>
+    </nav>
+    <div class="nav-actions">
+      <span class="role-pill" id="role-pill">Role</span>
+    </div>
+    <button class="nav-toggle" aria-label="Toggle menu"><span></span><span></span><span></span></button>
+  </div>
+</header>
+
+<main class="container">
+  <div class="editor-toolbar">
+    <div>
+      <h1 style="margin-bottom:4px; font-size:1.4rem;" id="editor-title">Menu editor</h1>
+      <p class="muted mb-0" style="font-size:0.86rem;">Tiles are grouped under each category. Use the arrows to reorder, the pencil to edit, and the ⋮ menu to move an item to a different category.</p>
+    </div>
+  </div>
+
+  <div class="category-strip" id="category-strip"></div>
+
+  <div id="categories-container"></div>
+</main>
+
+<footer class="site-footer">
+  <div class="container footer-bottom">
+    <span>© <span data-year></span> Infinitum. All rights reserved.</span>
+    <span>Changes save automatically in this prototype (to your browser only).</span>
+  </div>
+</footer>
+
+<input type="file" id="hidden-image-input" accept="image/*" class="hidden">
+
+<script src="js/menuData.js"></script>
+<script src="js/theme.js"></script>
+<script src="js/main.js"></script>
+<script src="js/editMenu.js"></script>
+</body>
+</html>
