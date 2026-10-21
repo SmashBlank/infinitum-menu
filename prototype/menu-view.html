@@ -91,9 +91,12 @@
                 <div class="card public-card">
                   <div class="img-wrap"><img src="${DataStore.resolvedImage(item)}" alt="${item.name}"></div>
                   <div class="card-body">
-                    <h3>${item.name}</h3>
+                    <h3 class="item-name">${item.name}</h3>
                     <div class="price-line">${DataStore.formatPrice(item)}</div>
-                    <p>${DataStore.resolvedDescription(item)}</p>
+                    <p class="item-desc">${DataStore.resolvedDescription(item)}</p>
+                    <button type="button" class="expand-toggle hidden">
+                      <span class="label">Show more</span><span class="arrow">⌄</span>
+                    </button>
                   </div>
                 </div>
               `).join("")}
@@ -101,6 +104,22 @@
           </div>
         `;
         sections.appendChild(section);
+      });
+
+      // For each tile, only show the "Show more" toggle if the name or
+      // description actually got truncated/clamped — short items stay
+      // exactly as tall as the image, with no extra UI clutter.
+      document.querySelectorAll(".public-card").forEach((card) => {
+        const name = card.querySelector(".item-name");
+        const desc = card.querySelector(".item-desc");
+        const toggle = card.querySelector(".expand-toggle");
+        const isOverflowing = name.scrollWidth > name.clientWidth + 1 || desc.scrollHeight > desc.clientHeight + 1;
+        if (!isOverflowing) return;
+        toggle.classList.remove("hidden");
+        toggle.addEventListener("click", () => {
+          const expanded = card.classList.toggle("expanded");
+          toggle.querySelector(".label").textContent = expanded ? "Show less" : "Show more";
+        });
       });
 
       // Highlight the active nav link based on scroll position. The offset

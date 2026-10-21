@@ -248,20 +248,36 @@
 .menu-nav a:hover, .menu-nav a.active { background: var(--accent); color: var(--accent-contrast); text-decoration: none; }
 
 .public-section { padding: 36px 0; }
-.public-card-grid { display: flex; flex-direction: column; gap: 14px; }
-.public-card { overflow: hidden; display: flex; flex-direction: row; align-items: stretch; }
+.public-card-grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
+@media (min-width: 760px) {
+  .public-card-grid { grid-template-columns: repeat(2, 1fr); }
+}
+.public-card { overflow: hidden; display: flex; flex-direction: row; align-items: flex-start; }
 .public-card .img-wrap {
   width: 104px; height: 104px; flex-shrink: 0; background: var(--bg-soft); overflow: hidden; border-radius: var(--radius-sm);
   margin: 12px 0 12px 12px;
 }
 .public-card .img-wrap img { width: 100%; height: 100%; object-fit: cover; }
 .public-card .card-body { padding: 14px 16px; flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
-.public-card h3 { font-size: 1rem; margin-bottom: 4px; }
+.public-card h3.item-name {
+  font-size: 1rem; margin-bottom: 4px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .public-card .price-line { font-weight: 700; color: var(--accent); font-size: 0.9rem; margin-bottom: 4px; }
-.public-card p {
+.public-card p.item-desc {
   font-size: 0.85rem; margin-bottom: 0;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
+.public-card.expanded h3.item-name { white-space: normal; overflow: visible; text-overflow: clip; }
+.public-card.expanded p.item-desc { -webkit-line-clamp: unset; display: block; overflow: visible; }
+
+.expand-toggle {
+  align-self: flex-start; margin-top: 6px; padding: 0; border: none; background: none; cursor: pointer;
+  color: var(--accent); font-size: 0.78rem; font-weight: 600; display: flex; align-items: center; gap: 3px;
+  font-family: inherit;
+}
+.expand-toggle .arrow { transition: transform .15s ease; display: inline-block; }
+.public-card.expanded .expand-toggle .arrow { transform: rotate(180deg); }
 
 @media (max-width: 480px) {
   .public-card .img-wrap { width: 84px; height: 84px; margin: 10px 0 10px 10px; }
