@@ -21,6 +21,7 @@
   // Track which single item tile is currently open for editing.
   let editingItemId = null;
   let openMoveMenuId = null;
+  let addDishMenuOpen = false;
 
   document.getElementById("brand-name").textContent = restaurant.name;
   document.getElementById("editor-title").textContent = `${restaurant.name} — menu editor`;
@@ -44,11 +45,48 @@
     return restaurant.categories.find((c) => c.id === catId);
   }
 
+  // Creates a new blank dish in the given category, opens it for editing,
+  // and scrolls to it. Used by both the per-category "+ Add new dish" tile
+  // and the toolbar-level "+ Add new dish" button — available to both the
+  // admin and restaurant roles (only deleting is admin-only).
+  function addDishToCategory(cat) {
+    const newItem = { id: makeId("item"), name: "New item", price: "0", image: null, description: "" };
+    cat.items.push(newItem);
+    editingItemId = newItem.id;
+    addDishMenuOpen = false;
+    persist();
+    render();
+    document.getElementById(`section-${cat.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   // ---------------------------------------------------------------- render
 
   function render() {
     renderCategoryStrip();
     renderCategorySections();
+    renderAddDishMenu();
+  }
+
+  function renderAddDishMenu() {
+    const list = document.getElementById("add-dish-list");
+    list.classList.toggle("open", addDishMenuOpen);
+    if (!addDishMenuOpen) return;
+
+    list.innerHTML =
+      restaurant.categories.map((c) => `<button data-add-cat="${c.id}">Add to "${c.name}"</button>`).join("") +
+      `<button data-add-new-cat="1">+ New category…</button>`;
+
+    list.querySelectorAll("[data-add-cat]").forEach((btn) => {
+      btn.addEventListener("click", () => addDishToCategory(findCategory(btn.dataset.addCat)));
+    });
+    list.querySelector("[data-add-new-cat]").addEventListener("click", () => {
+      const name = prompt("New category name:");
+      addDishMenuOpen = false;
+      if (!name || !name.trim()) { render(); return; }
+      const newCat = { id: makeId("cat"), name: name.trim(), items: [] };
+      restaurant.categories.push(newCat);
+      addDishToCategory(newCat);
+    });
   }
 
   function renderCategoryStrip() {
@@ -118,13 +156,8 @@
 
       const addTile = document.createElement("button");
       addTile.className = "add-item-tile";
-      addTile.innerHTML = "&#43; Add item";
-      addTile.addEventListener("click", () => {
-        const newItem = { id: makeId("item"), name: "New item", price: "0", image: null, description: "" };
-        cat.items.push(newItem);
-        editingItemId = newItem.id;
-        persist(); render();
-      });
+      addTile.innerHTML = "&#43; Add new dish";
+      addTile.addEventListener("click", () => addDishToCategory(cat));
       grid.appendChild(addTile);
 
       section.appendChild(grid);
@@ -295,10 +328,35 @@
     item.description = tile.querySelector(".edit-desc").value.trim();
   }
 
-  // Close any open "move to category" menu when clicking elsewhere.
+  // Toolbar-level "+ Add new dish" button — lets you add a dish without
+  // scrolling to find its category, and can create a brand-new category
+  // on the fly if none exist yet.
+  document.getElementById("add-dish-btn").addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (restaurant.categories.length === 0) {
+      const name = prompt("You'll need a category first. Name your first category:");
+      if (!name || !name.trim()) return;
+      const newCat = { id: makeId("cat"), name: name.trim(), items: [] };
+      restaurant.categories.push(newCat);
+      addDishToCategory(newCat);
+      return;
+    }
+    if (restaurant.categories.length === 1) {
+      addDishToCategory(restaurant.categories[0]);
+      return;
+    }
+    addDishMenuOpen = !addDishMenuOpen;
+    render();
+  });
+
+  // Close any open "move to category" or "add new dish" menu when clicking elsewhere.
   document.addEventListener("click", (e) => {
     if (openMoveMenuId && !e.target.closest(".move-menu")) {
       openMoveMenuId = null;
+      render();
+    }
+    if (addDishMenuOpen && !e.target.closest("#add-dish-menu")) {
+      addDishMenuOpen = false;
       render();
     }
   });
