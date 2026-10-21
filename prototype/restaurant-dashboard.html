@@ -45,8 +45,12 @@
 
       <div class="card card-pad">
         <h3 style="margin-bottom:6px;">Your menu</h3>
-        <p class="muted" style="font-size:0.88rem;">Add categories, add dishes, edit descriptions and reorder items — all from one editor page.</p>
-        <a href="#" id="edit-menu-link-2" class="btn btn-primary btn-sm">Open menu editor</a>
+        <p class="muted" style="font-size:0.88rem;" id="menu-card-desc">Add categories, add dishes, edit descriptions and reorder items — all from one editor page.</p>
+        <div class="flex gap-12" style="flex-wrap:wrap;">
+          <a href="#" id="scan-menu-link" class="btn btn-outline btn-sm">📷 Scan new menu</a>
+          <a href="#" id="edit-menu-link-2" class="btn btn-primary btn-sm">Open menu editor</a>
+        </div>
+        <p class="mt-16 mb-0" id="publish-status" style="font-size:0.82rem;"></p>
       </div>
 
       <div class="card card-pad">
@@ -105,11 +109,23 @@
     document.getElementById("brand-name").textContent = restaurant.name;
     document.getElementById("edit-menu-link").href = `edit-menu.html?r=${restaurantId}&role=restaurant`;
     document.getElementById("edit-menu-link-2").href = `edit-menu.html?r=${restaurantId}&role=restaurant`;
+    document.getElementById("scan-menu-link").href = `scan-menu.html?r=${restaurantId}&role=restaurant`;
     document.getElementById("view-menu-link").href = `menu-view.html?r=${restaurantId}`;
 
     const itemCount = restaurant.categories.reduce((sum, c) => sum + c.items.length, 0);
     document.getElementById("stat-categories").textContent = restaurant.categories.length;
     document.getElementById("stat-items").textContent = itemCount;
+
+    const menuCardDesc = document.getElementById("menu-card-desc");
+    const publishStatus = document.getElementById("publish-status");
+    if (restaurant.categories.length === 0) {
+      menuCardDesc.textContent = "You haven't added any dishes yet. Scan a photo of your paper menu to get started quickly, or build it manually.";
+      publishStatus.innerHTML = `<span class="muted">Nothing published yet — customers will see a "menu coming soon" page until you publish.</span>`;
+    } else if (DataStore.hasUnpublishedChanges(restaurant)) {
+      publishStatus.innerHTML = `<span style="color:var(--accent); font-weight:600;">●</span> You have unpublished changes — open the editor and hit <strong>Publish</strong> to make them live.`;
+    } else {
+      publishStatus.innerHTML = `<span style="color:#2f6b3a; font-weight:600;">●</span> Your menu is live and up to date.`;
+    }
 
     const brandLogoImg = document.getElementById("brand-logo");
     const brandDot = document.getElementById("brand-dot");

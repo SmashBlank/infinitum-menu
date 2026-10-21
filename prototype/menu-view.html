@@ -11,6 +11,7 @@
 
 <div class="menu-hero">
   <div class="container">
+    <div class="preview-banner hidden" id="preview-banner">👁️ Preview mode — customers won't see this until you publish</div>
     <div class="logo-circle" id="logo-circle">
       <span class="muted" style="font-size:0.7rem;">Logo</span>
     </div>
@@ -36,6 +37,7 @@
 <script>
   const params = new URLSearchParams(window.location.search);
   const restaurantId = params.get("r") || "green-leaf-cafe";
+  const isPreview = params.get("preview") === "1";
   const restaurant = DataStore.getRestaurant(restaurantId);
 
   if (!restaurant) {
@@ -44,6 +46,8 @@
     document.title = `${restaurant.name} — Menu`;
     document.getElementById("restaurant-name").textContent = restaurant.name;
     document.getElementById("restaurant-tagline").textContent = `Welcome! Here's what's on our menu today.`;
+
+    if (isPreview) document.getElementById("preview-banner").classList.remove("hidden");
 
     // Apply the color theme derived from this restaurant's logo.
     Theme.ensureTheme(restaurantId, restaurant.logo);
@@ -54,47 +58,62 @@
 
     const nav = document.getElementById("menu-nav");
     const sections = document.getElementById("menu-sections");
+    // Preview mode (used from the editor) shows the working draft; the real
+    // public URL only ever shows what's actually been published.
+    const categories = isPreview ? restaurant.categories : restaurant.publishedCategories;
 
-    restaurant.categories.forEach((cat, idx) => {
-      const link = document.createElement("a");
-      link.href = `#section-${cat.id}`;
-      link.textContent = cat.name;
-      if (idx === 0) link.classList.add("active");
-      nav.appendChild(link);
-
-      const section = document.createElement("section");
-      section.className = "public-section";
-      section.id = `section-${cat.id}`;
-      section.innerHTML = `
-        <div class="container">
-          <h2 style="margin-bottom:20px;">${cat.name}</h2>
-          <div class="public-card-grid">
-            ${cat.items.map((item) => `
-              <div class="card public-card">
-                <div class="img-wrap"><img src="${DataStore.resolvedImage(item)}" alt="${item.name}"></div>
-                <div class="card-body">
-                  <h3>${item.name}</h3>
-                  <div class="price-line">${DataStore.formatPrice(item)}</div>
-                  <p>${DataStore.resolvedDescription(item)}</p>
-                </div>
-              </div>
-            `).join("")}
-          </div>
+    if (!categories || categories.length === 0) {
+      nav.classList.add("hidden");
+      sections.innerHTML = `
+        <div class="container" style="padding:60px 0; text-align:center;">
+          <h2 style="margin-bottom:8px;">${isPreview ? "Nothing to preview yet" : "Menu coming soon"}</h2>
+          <p class="muted">${isPreview
+            ? "Add a category and a few dishes in the editor to see a preview here."
+            : "We're still setting up our digital menu — please check back shortly!"}</p>
         </div>
       `;
-      sections.appendChild(section);
-    });
+    } else {
+      categories.forEach((cat, idx) => {
+        const link = document.createElement("a");
+        link.href = `#section-${cat.id}`;
+        link.textContent = cat.name;
+        if (idx === 0) link.classList.add("active");
+        nav.appendChild(link);
 
-    // Highlight the active nav link based on scroll position.
-    const navLinks = Array.from(nav.querySelectorAll("a"));
-    const sectionEls = restaurant.categories.map((c) => document.getElementById(`section-${c.id}`));
-    window.addEventListener("scroll", () => {
-      let activeIdx = 0;
-      sectionEls.forEach((el, i) => {
-        if (el.getBoundingClientRect().top - 120 <= 0) activeIdx = i;
+        const section = document.createElement("section");
+        section.className = "public-section";
+        section.id = `section-${cat.id}`;
+        section.innerHTML = `
+          <div class="container">
+            <h2 style="margin-bottom:20px;">${cat.name}</h2>
+            <div class="public-card-grid">
+              ${cat.items.map((item) => `
+                <div class="card public-card">
+                  <div class="img-wrap"><img src="${DataStore.resolvedImage(item)}" alt="${item.name}"></div>
+                  <div class="card-body">
+                    <h3>${item.name}</h3>
+                    <div class="price-line">${DataStore.formatPrice(item)}</div>
+                    <p>${DataStore.resolvedDescription(item)}</p>
+                  </div>
+                </div>
+              `).join("")}
+            </div>
+          </div>
+        `;
+        sections.appendChild(section);
       });
-      navLinks.forEach((l, i) => l.classList.toggle("active", i === activeIdx));
-    });
+
+      // Highlight the active nav link based on scroll position.
+      const navLinks = Array.from(nav.querySelectorAll("a"));
+      const sectionEls = categories.map((c) => document.getElementById(`section-${c.id}`));
+      window.addEventListener("scroll", () => {
+        let activeIdx = 0;
+        sectionEls.forEach((el, i) => {
+          if (el.getBoundingClientRect().top - 120 <= 0) activeIdx = i;
+        });
+        navLinks.forEach((l, i) => l.classList.toggle("active", i === activeIdx));
+      });
+    }
   }
 </script>
 </body>

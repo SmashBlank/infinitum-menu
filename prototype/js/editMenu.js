@@ -25,7 +25,7 @@
 
   document.getElementById("brand-name").textContent = restaurant.name;
   document.getElementById("editor-title").textContent = `${restaurant.name} — menu editor`;
-  document.getElementById("preview-link").href = `menu-view.html?r=${restaurantId}`;
+  document.getElementById("preview-link").href = `menu-view.html?r=${restaurantId}&preview=1`;
   document.getElementById("back-link").href =
     role === "admin" ? "admin-dashboard.html" : `restaurant-dashboard.html?r=${restaurantId}`;
   const rolePill = document.getElementById("role-pill");
@@ -42,8 +42,37 @@
     });
   });
 
+  const publishBtn = document.getElementById("publish-btn");
+  const publishPill = document.getElementById("publish-status-pill");
+
+  function refreshPublishStatus() {
+    if (restaurant.categories.length === 0) {
+      publishPill.textContent = "Nothing to publish yet";
+      publishPill.classList.remove("is-admin");
+      publishBtn.disabled = true;
+      publishBtn.textContent = "Publish";
+    } else if (DataStore.hasUnpublishedChanges(restaurant)) {
+      publishPill.textContent = "Draft changes";
+      publishPill.classList.add("is-admin");
+      publishBtn.disabled = false;
+      publishBtn.textContent = "Publish changes";
+    } else {
+      publishPill.textContent = "Live ✓";
+      publishPill.classList.remove("is-admin");
+      publishBtn.disabled = true;
+      publishBtn.textContent = "Published";
+    }
+  }
+
+  publishBtn.addEventListener("click", () => {
+    restaurant.publishedCategories = JSON.parse(JSON.stringify(restaurant.categories));
+    persist();
+    alert("Your menu is now live — customers will see these changes.");
+  });
+
   function persist() {
     DataStore.saveRestaurant(restaurantId, restaurant);
+    refreshPublishStatus();
   }
 
   function makeId(prefix) {
@@ -371,4 +400,5 @@
   });
 
   render();
+  refreshPublishStatus();
 })();

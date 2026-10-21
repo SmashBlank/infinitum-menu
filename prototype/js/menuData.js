@@ -39,6 +39,9 @@ function lookupDefaultDescription(name) {
 }
 
 // Seed data — acts as "what's already in the database" for the demo.
+// `publishedCategories` is what customers currently see; `categories` is the
+// working draft being edited. They start identical for these seed
+// restaurants (as if already live) except for the brand-new one below.
 const SEED_RESTAURANTS = {
   "green-leaf-cafe": {
     id: "green-leaf-cafe",
@@ -138,6 +141,16 @@ const SEED_RESTAURANTS = {
         ]
       }
     ]
+  },
+  // A brand-new, just-onboarded restaurant with no menu yet — demonstrates
+  // the "scan your first menu" flow for a restaurant that has nothing live.
+  "fresh-bites-diner": {
+    id: "fresh-bites-diner",
+    name: "Fresh Bites Diner",
+    plan: "Free plan",
+    logo: null,
+    categories: [],
+    publishedCategories: []
   }
 };
 
@@ -151,11 +164,18 @@ const DataStore = {
   getRestaurant(id) {
     const raw = localStorage.getItem(this._storageKey(id));
     if (raw) {
-      try { return JSON.parse(raw); } catch (e) { /* fall through to seed */ }
+      try {
+        const data = JSON.parse(raw);
+        // Older saved sessions won't have a `publishedCategories` field yet —
+        // treat whatever they already had as already-published.
+        if (!data.publishedCategories) data.publishedCategories = JSON.parse(JSON.stringify(data.categories));
+        return data;
+      } catch (e) { /* fall through to seed */ }
     }
     const seed = SEED_RESTAURANTS[id];
     if (!seed) return null;
     const clone = JSON.parse(JSON.stringify(seed));
+    if (!clone.publishedCategories) clone.publishedCategories = JSON.parse(JSON.stringify(clone.categories));
     this.saveRestaurant(id, clone);
     return clone;
   },
@@ -167,6 +187,36 @@ const DataStore = {
   resetRestaurant(id) {
     localStorage.removeItem(this._storageKey(id));
     return this.getRestaurant(id);
+  },
+
+  /** Copies the current working draft live, so customers can see it. */
+  publish(id) {
+    const restaurant = this.getRestaurant(id);
+    if (!restaurant) return null;
+    restaurant.publishedCategories = JSON.parse(JSON.stringify(restaurant.categories));
+    this.saveRestaurant(id, restaurant);
+    return restaurant;
+  },
+
+  hasUnpublishedChanges(restaurant) {
+    return JSON.stringify(restaurant.categories) !== JSON.stringify(restaurant.publishedCategories);
+  },
+
+  /** Merges freshly-scanned categories/items into a restaurant's draft menu,
+   *  matching by category name (case-insensitive) instead of overwriting,
+   *  so scanning never wipes out dishes that are already there. */
+  mergeScannedCategories(restaurant, scannedCategories) {
+    scannedCategories.forEach((scanned) => {
+      const existing = restaurant.categories.find(
+        (c) => c.name.trim().toLowerCase() === scanned.name.trim().toLowerCase()
+      );
+      if (existing) {
+        existing.items.push(...scanned.items);
+      } else {
+        restaurant.categories.push(scanned);
+      }
+    });
+    return restaurant;
   },
 
   resolvedDescription(item) {

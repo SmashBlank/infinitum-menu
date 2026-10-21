@@ -82,17 +82,26 @@
   restaurants.forEach((r) => {
     const itemCount = r.categories.reduce((sum, c) => sum + c.items.length, 0);
     totalItems += itemCount;
+    const statusBadge = r.categories.length === 0
+      ? `<span class="badge" style="background:var(--bg-soft); color:var(--text-muted);">No menu yet</span>`
+      : DataStore.hasUnpublishedChanges(r)
+        ? `<span class="badge">Draft changes</span>`
+        : `<span class="badge" style="background:#e5f3e8; color:#2f6b3a;">Live</span>`;
+
     const li = document.createElement("li");
     li.className = "restaurant-row";
     li.innerHTML = `
       <a href="edit-menu.html?r=${r.id}&role=admin">
-        <img class="restaurant-logo" src="${r.logo}" alt="">
+        <img class="restaurant-logo" src="${r.logo || DEFAULT_IMAGE}" alt="">
         <span class="restaurant-info">
           <strong>${r.name}</strong>
-          <span>${r.plan} · ${r.categories.length} categories · ${itemCount} items</span>
+          <span>${r.plan} · ${r.categories.length} categories · ${itemCount} items · ${statusBadge}</span>
         </span>
       </a>
-      <a href="edit-menu.html?r=${r.id}&role=admin" class="btn btn-ghost btn-sm">Edit menu</a>
+      <span class="flex gap-8">
+        <a href="scan-menu.html?r=${r.id}&role=admin" class="btn btn-ghost btn-sm">📷 Scan</a>
+        <a href="edit-menu.html?r=${r.id}&role=admin" class="btn btn-ghost btn-sm">Edit menu</a>
+      </span>
     `;
     list.appendChild(li);
   });

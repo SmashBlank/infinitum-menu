@@ -106,15 +106,18 @@ img { max-width: 100%; display: block; }
   padding: 16px 0;
   gap: 16px;
 }
-.brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 1.1rem; color: var(--text); }
-.brand img, .brand .brand-dot { width: 32px; height: 32px; border-radius: 9px; object-fit: cover; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 1.1rem; color: var(--text); min-width: 0; }
+.brand img, .brand .brand-dot { width: 32px; height: 32px; border-radius: 9px; object-fit: cover; flex-shrink: 0; }
 .brand .brand-dot { background: var(--accent); display: inline-block; }
 .brand:hover { text-decoration: none; }
+.brand > span:last-child {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 
 .nav-links { display: flex; align-items: center; gap: 28px; }
 .nav-links a { color: var(--text-muted); font-size: 0.93rem; }
 .nav-links a.active, .nav-links a:hover { color: var(--text); text-decoration: none; }
-.nav-actions { display: flex; align-items: center; gap: 12px; }
+.nav-actions { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
 
 .nav-toggle { display: none; background: none; border: none; cursor: pointer; padding: 6px; }
 .nav-toggle span { display: block; width: 22px; height: 2px; background: var(--text); margin: 4px 0; border-radius: 2px; }
@@ -183,4 +186,10 @@ textarea { resize: vertical; min-height: 70px; }
   .nav-links.open { display: flex; }
   .nav-toggle { display: block; }
   .footer-bottom { flex-direction: column; }
+
+  /* Keep the brand + hamburger on one line, and let any extra header
+     controls (theme/publish buttons, role pills, etc.) wrap onto their own
+     row underneath rather than overflowing the viewport horizontally. */
+  .nav-row { flex-wrap: wrap; row-gap: 10px; }
+  .nav-actions { flex-basis: 100%; order: 3; flex-wrap: wrap; justify-content: flex-start; }
 }

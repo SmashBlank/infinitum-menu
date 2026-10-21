@@ -102,6 +102,11 @@
 .restaurant-info strong { display: block; font-size: 0.94rem; }
 .restaurant-info span { font-size: 0.8rem; color: var(--text-muted); }
 
+@media (max-width: 560px) {
+  .restaurant-row { flex-direction: column; align-items: stretch; }
+  .restaurant-row > span { justify-content: flex-start; }
+}
+
 .stat-row { display: flex; gap: 14px; flex-wrap: wrap; }
 .stat-box { flex: 1; min-width: 120px; padding: 16px; text-align: center; }
 .stat-box .num { font-size: 1.5rem; font-weight: 700; color: var(--accent); }
@@ -220,6 +225,10 @@
 .menu-hero {
   padding: 46px 0 28px; text-align: center; background: var(--bg-soft); border-bottom: 1px solid var(--border);
 }
+.preview-banner {
+  display: inline-block; margin: 0 auto 18px; padding: 7px 16px; border-radius: 999px;
+  background: var(--accent-soft); color: var(--accent); font-size: 0.8rem; font-weight: 600;
+}
 .menu-hero .logo-circle {
   width: 72px; height: 72px; border-radius: 20px; margin: 0 auto 14px; overflow: hidden; background: var(--surface);
   display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow);
@@ -252,13 +261,16 @@
 .scan-wrap { max-width: 540px; margin: 0 auto; padding: 36px 20px 60px; }
 .camera-frame {
   position: relative; background: #141210; border-radius: var(--radius); overflow: hidden; aspect-ratio: 3/4;
-  display: flex; align-items: center; justify-content: center;
 }
-.camera-frame video { width: 100%; height: 100%; object-fit: cover; }
-.camera-placeholder { color: #cfc6ba; text-align: center; padding: 24px; font-size: 0.9rem; }
-.camera-controls { display: flex; justify-content: center; gap: 16px; margin-top: 18px; }
+.camera-frame video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.camera-placeholder {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  color: #cfc6ba; text-align: center; padding: 24px; font-size: 0.9rem;
+}
+.camera-controls { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 16px; margin-top: 18px; }
 .shutter-btn {
   width: 64px; height: 64px; border-radius: 50%; border: 4px solid var(--accent); background: var(--surface); cursor: pointer;
+  flex-shrink: 0;
 }
 .shutter-btn:hover { background: var(--accent-soft); }
 .shots-strip { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 22px; }

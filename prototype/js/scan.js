@@ -1,12 +1,20 @@
 /* ==========================================================================
    Infinitum — "Scan new menu" camera flow
-   Lets admin snap multiple photos (or upload them if no camera access),
-   remove any before finishing, then simulates analyzing them into a draft
-   menu. Real OCR/photo-reading is a later phase — this wires up the full
-   UX so it can be swapped for a real analysis step without redesign.
+   Used by both Admin (onboarding a brand-new restaurant) and restaurant
+   owners (scanning their own paper menu, e.g. right after signing up).
+   Snaps multiple photos, lets you remove any before finishing, then
+   simulates analyzing them into categories/items. Real OCR is a later
+   phase — this wires up the full UX so it can be swapped in without a
+   redesign. Scanned results are merged into the restaurant's *draft* menu
+   only — customers won't see anything until it's Published in the editor.
    ========================================================================== */
 
 (function () {
+  const params = new URLSearchParams(window.location.search);
+  const restaurantId = params.get("r"); // absent = admin onboarding a brand-new restaurant
+  const role = params.get("role") === "admin" ? "admin" : "restaurant";
+  const restaurant = restaurantId ? DataStore.getRestaurant(restaurantId) : null;
+
   const video = document.getElementById("camera-video");
   const placeholder = document.getElementById("camera-placeholder");
   const startBtn = document.getElementById("start-camera-btn");
@@ -16,6 +24,17 @@
   const fallbackInput = document.getElementById("fallback-file-input");
   const analyzingOverlay = document.getElementById("analyzing-overlay");
   const cameraStage = document.getElementById("camera-stage");
+
+  if (restaurant) {
+    document.getElementById("brand-name").textContent = restaurant.name;
+    document.getElementById("brand-link").href = `restaurant-dashboard.html?r=${restaurantId}`;
+    document.getElementById("cancel-link").href =
+      role === "admin" ? `edit-menu.html?r=${restaurantId}&role=admin` : `restaurant-dashboard.html?r=${restaurantId}`;
+    document.getElementById("scan-title").textContent = `Scan a menu for ${restaurant.name}`;
+    document.getElementById("scan-subtitle").textContent =
+      "Click as many photos of your paper menu as you need. New dishes are added to your draft menu for you to review — remove any photo with ✕, then press Done.";
+    if (typeof Theme !== "undefined") Theme.ensureTheme(restaurantId, restaurant.logo);
+  }
 
   let stream = null;
   const shots = []; // data URLs of captured/uploaded photos
@@ -88,39 +107,35 @@
   });
 
   // Mock "what OCR would produce" — enough variety to demo the editor.
-  function buildDraftRestaurant() {
+  function buildScannedCategories() {
     const pick = (i) => (shots.length ? shots[i % shots.length] : null);
-    return {
-      id: "new-scan-draft",
-      name: "New Menu Draft",
-      plan: "Free plan",
-      logo: null,
-      categories: [
-        {
-          id: "cat-starters",
-          name: "Starters",
-          items: [
-            { id: "d1", name: "Paneer Tikka", price: "210", image: pick(0), description: null },
-            { id: "d2", name: "Garlic Bread", price: "140", image: pick(1), description: null }
-          ]
-        },
-        {
-          id: "cat-mains",
-          name: "Main Course",
-          items: [
-            { id: "d3", name: "Hakka Noodles", price: "190", image: pick(2), description: null },
-            { id: "d4", name: "Butter Chicken", price: "320", image: pick(3), description: null }
-          ]
-        },
-        {
-          id: "cat-beverages",
-          name: "Beverages",
-          items: [
-            { id: "d5", name: "Cold Coffee", price: "120", image: pick(4), description: null }
-          ]
-        }
-      ]
-    };
+    let n = 0;
+    const id = (prefix) => `${prefix}-${Date.now().toString(36)}-${(n++).toString(36)}`;
+    return [
+      {
+        id: id("cat"),
+        name: "Starters",
+        items: [
+          { id: id("item"), name: "Paneer Tikka", price: "210", image: pick(0), description: null },
+          { id: id("item"), name: "Garlic Bread", price: "140", image: pick(1), description: null }
+        ]
+      },
+      {
+        id: id("cat"),
+        name: "Main Course",
+        items: [
+          { id: id("item"), name: "Hakka Noodles", price: "190", image: pick(2), description: null },
+          { id: id("item"), name: "Butter Chicken", price: "320", image: pick(3), description: null }
+        ]
+      },
+      {
+        id: id("cat"),
+        name: "Beverages",
+        items: [
+          { id: id("item"), name: "Cold Coffee", price: "120", image: pick(4), description: null }
+        ]
+      }
+    ];
   }
 
   doneBtn.addEventListener("click", () => {
@@ -131,9 +146,27 @@
     analyzingOverlay.classList.remove("hidden");
 
     setTimeout(() => {
-      const draft = buildDraftRestaurant();
-      localStorage.setItem("infinitum_menu_new-scan-draft", JSON.stringify(draft));
-      window.location.href = "edit-menu.html?r=new-scan-draft&role=admin";
+      const scanned = buildScannedCategories();
+
+      if (restaurant) {
+        // An existing restaurant (new or established) scanning their own
+        // menu — merge into their draft without touching what's published.
+        DataStore.mergeScannedCategories(restaurant, scanned);
+        DataStore.saveRestaurant(restaurantId, restaurant);
+        window.location.href = `edit-menu.html?r=${restaurantId}&role=${role}`;
+      } else {
+        // Admin onboarding a brand-new restaurant from scratch.
+        const draft = {
+          id: "new-scan-draft",
+          name: "New Menu Draft",
+          plan: "Free plan",
+          logo: null,
+          categories: scanned,
+          publishedCategories: []
+        };
+        localStorage.setItem("infinitum_menu_new-scan-draft", JSON.stringify(draft));
+        window.location.href = "edit-menu.html?r=new-scan-draft&role=admin";
+      }
     }, 1800);
   });
 

@@ -11,18 +11,18 @@
 
 <header class="site-header">
   <div class="container nav-row">
-    <a href="admin-dashboard.html" class="brand"><span class="brand-dot"></span> Infinitum</a>
+    <a href="admin-dashboard.html" id="brand-link" class="brand"><span class="brand-dot"></span> <span id="brand-name">Infinitum</span></a>
     <nav class="nav-links"></nav>
     <div class="nav-actions">
-      <a href="admin-dashboard.html" class="btn btn-ghost btn-sm">Cancel</a>
+      <a href="admin-dashboard.html" id="cancel-link" class="btn btn-ghost btn-sm">Cancel</a>
     </div>
     <button class="nav-toggle" aria-label="Toggle menu"><span></span><span></span><span></span></button>
   </div>
 </header>
 
 <main class="scan-wrap">
-  <h1 style="font-size:1.3rem;">Scan a new menu</h1>
-  <p class="muted">Click as many photos of the paper menu as you need. Remove any with the ✕, then press Done.</p>
+  <h1 style="font-size:1.3rem;" id="scan-title">Scan a new menu</h1>
+  <p class="muted" id="scan-subtitle">Click as many photos of the paper menu as you need. Remove any with the ✕, then press Done.</p>
 
   <div id="camera-stage">
     <div class="camera-frame">
@@ -51,7 +51,7 @@
     <p class="muted">Finding item names, prices, and categories from your photos.</p>
   </div>
 
-  <p class="demo-note mt-24">Prototype note: real photo-to-text reading (OCR) isn't wired up yet — this screen simulates it and opens a sample draft menu so you can see the editor flow end-to-end.</p>
+  <p class="demo-note mt-24">Prototype note: real photo-to-text reading (OCR) isn't wired up yet — this screen simulates it. New categories/dishes are added to your <strong>draft</strong> menu, ready for you to review in the editor; nothing customers see changes until you hit Publish there.</p>
 </main>
 
 <footer class="site-footer">
@@ -60,6 +60,8 @@
   </div>
 </footer>
 
+<script src="js/menuData.js"></script>
+<script src="js/theme.js"></script>
 <script src="js/main.js"></script>
 <script src="js/scan.js"></script>
 </body>
