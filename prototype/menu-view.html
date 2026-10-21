@@ -103,16 +103,28 @@
         sections.appendChild(section);
       });
 
-      // Highlight the active nav link based on scroll position.
+      // Highlight the active nav link based on scroll position. The offset
+      // matches the sticky nav's own height (plus a small buffer) so a
+      // section is marked active as soon as it's actually the one visible
+      // just below the nav bar, not only once it's scrolled far past it.
       const navLinks = Array.from(nav.querySelectorAll("a"));
       const sectionEls = categories.map((c) => document.getElementById(`section-${c.id}`));
-      window.addEventListener("scroll", () => {
+      function updateActiveNavLink() {
+        const offset = nav.getBoundingClientRect().height + 16;
         let activeIdx = 0;
         sectionEls.forEach((el, i) => {
-          if (el.getBoundingClientRect().top - 120 <= 0) activeIdx = i;
+          if (el.getBoundingClientRect().top - offset <= 0) activeIdx = i;
         });
+        // If the page is scrolled (near) all the way to the bottom, always
+        // treat the last category as active — a short final category can
+        // otherwise never reach the offset above because there's no more
+        // room left to scroll.
+        const atBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
+        if (atBottom) activeIdx = sectionEls.length - 1;
         navLinks.forEach((l, i) => l.classList.toggle("active", i === activeIdx));
-      });
+      }
+      window.addEventListener("scroll", updateActiveNavLink);
+      updateActiveNavLink();
     }
   }
 </script>
