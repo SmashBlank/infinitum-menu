@@ -128,20 +128,39 @@
       // just below the nav bar, not only once it's scrolled far past it.
       const navLinks = Array.from(nav.querySelectorAll("a"));
       const sectionEls = categories.map((c) => document.getElementById(`section-${c.id}`));
+
+      // Make sure clicking a category tab (or following any #section-… link)
+      // doesn't park the category heading right behind the sticky nav bar —
+      // reserve space above each section equal to the nav's real height.
+      const scrollOffsetPx = nav.getBoundingClientRect().height + 12;
+      sectionEls.forEach((el) => { el.style.scrollMarginTop = `${scrollOffsetPx}px`; });
+
       function updateActiveNavLink() {
+        // If the user just clicked a tab, trust that choice for a moment —
+        // a short final category can't always be scrolled far enough for
+        // its heading to pass the offset check below (there's simply no
+        // more page left to scroll), so position-based detection alone
+        // would incorrectly snap back to the previous category.
+        if (manualActiveIdx !== null && Date.now() < manualActiveUntil) {
+          navLinks.forEach((l, i) => l.classList.toggle("active", i === manualActiveIdx));
+          return;
+        }
         const offset = nav.getBoundingClientRect().height + 16;
         let activeIdx = 0;
         sectionEls.forEach((el, i) => {
           if (el.getBoundingClientRect().top - offset <= 0) activeIdx = i;
         });
-        // If the page is scrolled (near) all the way to the bottom, always
-        // treat the last category as active — a short final category can
-        // otherwise never reach the offset above because there's no more
-        // room left to scroll.
-        const atBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
-        if (atBottom) activeIdx = sectionEls.length - 1;
         navLinks.forEach((l, i) => l.classList.toggle("active", i === activeIdx));
       }
+      let manualActiveIdx = null;
+      let manualActiveUntil = 0;
+      navLinks.forEach((link, i) => {
+        link.addEventListener("click", () => {
+          manualActiveIdx = i;
+          manualActiveUntil = Date.now() + 700;
+          navLinks.forEach((l, j) => l.classList.toggle("active", j === i));
+        });
+      });
       window.addEventListener("scroll", updateActiveNavLink);
       updateActiveNavLink();
     }
