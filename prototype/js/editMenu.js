@@ -4,96 +4,49 @@
    `role` query param, which controls whether delete controls are shown.
    Category = parent (shown as a reorderable strip + section headers).
    Item = child (name, price/sizes, image, description) rendered as a tile.
+   All data now lives in Supabase — every mutation below calls DataStore,
+   then reloads the draft menu from the database and re-renders, so the UI
+   always reflects what's actually saved.
    ========================================================================== */
 
 (function () {
   const params = new URLSearchParams(window.location.search);
-  const restaurantId = params.get("r") || "green-leaf-cafe";
+  const restaurantId = params.get("r");
   const role = params.get("role") === "admin" ? "admin" : "restaurant";
   const canDelete = role === "admin";
 
-  let restaurant = DataStore.getRestaurant(restaurantId);
-  if (!restaurant) {
-    document.querySelector("main").innerHTML = "<p>Unknown restaurant.</p>";
-    return;
-  }
+  let restaurant = null;
+  let categories = [];
 
   // Track which single item tile is currently open for editing.
   let editingItemId = null;
   let openMoveMenuId = null;
   let addDishMenuOpen = false;
 
-  document.getElementById("brand-name").textContent = restaurant.name;
-  document.getElementById("editor-title").textContent = `${restaurant.name} — menu editor`;
-  document.getElementById("preview-link").href = `menu-view.html?r=${restaurantId}&preview=1`;
-  document.getElementById("back-link").href =
-    role === "admin" ? "admin-dashboard.html" : `restaurant-dashboard.html?r=${restaurantId}`;
-  const rolePill = document.getElementById("role-pill");
-  rolePill.textContent = role === "admin" ? "Admin — full access" : "Restaurant owner";
-  if (role === "admin") rolePill.classList.add("is-admin");
-
-  const themeCard = document.getElementById("theme-card");
-  document.getElementById("theme-toggle-btn").addEventListener("click", () => {
-    themeCard.classList.toggle("hidden");
-  });
-  Theme.ensureTheme(restaurantId, restaurant.logo, (vars, hsl) => {
-    mountThemePanel(document.getElementById("theme-panel"), restaurantId, restaurant, { vars, hsl }, {
-      onChange: () => persist()
-    });
-  });
-
-  const publishBtn = document.getElementById("publish-btn");
-  const publishPill = document.getElementById("publish-status-pill");
-
-  function refreshPublishStatus() {
-    if (restaurant.categories.length === 0) {
-      publishPill.textContent = "Nothing to publish yet";
-      publishPill.classList.remove("is-admin");
-      publishBtn.disabled = true;
-      publishBtn.textContent = "Publish";
-    } else if (DataStore.hasUnpublishedChanges(restaurant)) {
-      publishPill.textContent = "Draft changes";
-      publishPill.classList.add("is-admin");
-      publishBtn.disabled = false;
-      publishBtn.textContent = "Publish changes";
-    } else {
-      publishPill.textContent = "Live ✓";
-      publishPill.classList.remove("is-admin");
-      publishBtn.disabled = true;
-      publishBtn.textContent = "Published";
-    }
-  }
-
-  publishBtn.addEventListener("click", () => {
-    restaurant.publishedCategories = JSON.parse(JSON.stringify(restaurant.categories));
-    persist();
-    alert("Your menu is now live — customers will see these changes.");
-  });
-
-  function persist() {
-    DataStore.saveRestaurant(restaurantId, restaurant);
-    refreshPublishStatus();
-  }
-
-  function makeId(prefix) {
-    return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  function makeTempId() {
+    return `tmp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
   }
 
   function findCategory(catId) {
-    return restaurant.categories.find((c) => c.id === catId);
+    return categories.find((c) => c.id === catId);
+  }
+
+  async function reload() {
+    categories = await DataStore.getDraftMenu(restaurantId);
+    render();
+    await refreshPublishStatus();
   }
 
   // Creates a new blank dish in the given category, opens it for editing,
   // and scrolls to it. Used by both the per-category "+ Add new dish" tile
   // and the toolbar-level "+ Add new dish" button — available to both the
   // admin and restaurant roles (only deleting is admin-only).
-  function addDishToCategory(cat) {
-    const newItem = { id: makeId("item"), name: "New item", price: "0", image: null, description: "" };
-    cat.items.push(newItem);
-    editingItemId = newItem.id;
+  async function addDishToCategory(cat) {
     addDishMenuOpen = false;
-    persist();
-    render();
+    const sortOrder = cat.items.length;
+    const newItem = await DataStore.addItem(cat.id, { name: "New item", price: "0", image: null, description: "" }, sortOrder);
+    editingItemId = newItem.id;
+    await reload();
     document.getElementById(`section-${cat.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
@@ -111,19 +64,19 @@
     if (!addDishMenuOpen) return;
 
     list.innerHTML =
-      restaurant.categories.map((c) => `<button data-add-cat="${c.id}">Add to "${c.name}"</button>`).join("") +
+      categories.map((c) => `<button data-add-cat="${c.id}">Add to "${c.name}"</button>`).join("") +
       `<button data-add-new-cat="1">+ New category…</button>`;
 
     list.querySelectorAll("[data-add-cat]").forEach((btn) => {
       btn.addEventListener("click", () => addDishToCategory(findCategory(btn.dataset.addCat)));
     });
-    list.querySelector("[data-add-new-cat]").addEventListener("click", () => {
+    list.querySelector("[data-add-new-cat]").addEventListener("click", async () => {
       const name = prompt("New category name:");
       addDishMenuOpen = false;
       if (!name || !name.trim()) { render(); return; }
-      const newCat = { id: makeId("cat"), name: name.trim(), items: [] };
-      restaurant.categories.push(newCat);
-      addDishToCategory(newCat);
+      const newCat = await DataStore.addCategory(restaurantId, name.trim(), categories.length);
+      categories.push({ id: newCat.id, name: newCat.name, items: [] });
+      await addDishToCategory(findCategory(newCat.id));
     });
   }
 
@@ -131,30 +84,32 @@
     const strip = document.getElementById("category-strip");
     strip.innerHTML = "";
 
-    restaurant.categories.forEach((cat, idx) => {
+    categories.forEach((cat, idx) => {
       const chip = document.createElement("div");
       chip.className = "category-chip";
       chip.innerHTML = `
         ${idx > 0 ? `<button class="move-left" title="Move left">&#8592;</button>` : `<span style="width:22px;display:inline-block;"></span>`}
         <span class="cat-link">${cat.name}</span>
-        ${idx < restaurant.categories.length - 1 ? `<button class="move-right" title="Move right">&#8594;</button>` : `<span style="width:22px;display:inline-block;"></span>`}
+        ${idx < categories.length - 1 ? `<button class="move-right" title="Move right">&#8594;</button>` : `<span style="width:22px;display:inline-block;"></span>`}
         ${canDelete ? `<button class="delete-cat" title="Delete category">&#10005;</button>` : ""}
       `;
       chip.querySelector(".cat-link").addEventListener("click", () => {
         document.getElementById(`section-${cat.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
       });
-      chip.querySelector(".move-left")?.addEventListener("click", () => {
-        [restaurant.categories[idx - 1], restaurant.categories[idx]] = [restaurant.categories[idx], restaurant.categories[idx - 1]];
-        persist(); render();
+      chip.querySelector(".move-left")?.addEventListener("click", async () => {
+        [categories[idx - 1], categories[idx]] = [categories[idx], categories[idx - 1]];
+        await DataStore.reorderCategories(categories.map((c) => c.id));
+        await reload();
       });
-      chip.querySelector(".move-right")?.addEventListener("click", () => {
-        [restaurant.categories[idx + 1], restaurant.categories[idx]] = [restaurant.categories[idx], restaurant.categories[idx + 1]];
-        persist(); render();
+      chip.querySelector(".move-right")?.addEventListener("click", async () => {
+        [categories[idx + 1], categories[idx]] = [categories[idx], categories[idx + 1]];
+        await DataStore.reorderCategories(categories.map((c) => c.id));
+        await reload();
       });
-      chip.querySelector(".delete-cat")?.addEventListener("click", () => {
+      chip.querySelector(".delete-cat")?.addEventListener("click", async () => {
         if (!confirm(`Delete category "${cat.name}" and all its items?`)) return;
-        restaurant.categories.splice(idx, 1);
-        persist(); render();
+        await DataStore.deleteCategory(cat.id);
+        await reload();
       });
       strip.appendChild(chip);
     });
@@ -162,11 +117,11 @@
     const addBtn = document.createElement("button");
     addBtn.className = "btn btn-ghost btn-sm add-category-btn";
     addBtn.textContent = "+ Add category";
-    addBtn.addEventListener("click", () => {
+    addBtn.addEventListener("click", async () => {
       const name = prompt("New category name:");
       if (!name || !name.trim()) return;
-      restaurant.categories.push({ id: makeId("cat"), name: name.trim(), items: [] });
-      persist(); render();
+      await DataStore.addCategory(restaurantId, name.trim(), categories.length);
+      await reload();
     });
     strip.appendChild(addBtn);
   }
@@ -175,7 +130,7 @@
     const container = document.getElementById("categories-container");
     container.innerHTML = "";
 
-    restaurant.categories.forEach((cat) => {
+    categories.forEach((cat) => {
       const section = document.createElement("section");
       section.className = "category-section";
       section.id = `section-${cat.id}`;
@@ -225,15 +180,17 @@
       <button class="move-up" title="Move up" ${idx === 0 ? "disabled style='opacity:.3;cursor:default;'" : ""}>&#8593;</button>
       <button class="move-down" title="Move down" ${idx === cat.items.length - 1 ? "disabled style='opacity:.3;cursor:default;'" : ""}>&#8595;</button>
     `;
-    leftControls.querySelector(".move-up").addEventListener("click", () => {
+    leftControls.querySelector(".move-up").addEventListener("click", async () => {
       if (idx === 0) return;
       [cat.items[idx - 1], cat.items[idx]] = [cat.items[idx], cat.items[idx - 1]];
-      persist(); render();
+      await DataStore.reorderItems(cat.items.map((it) => it.id));
+      await reload();
     });
-    leftControls.querySelector(".move-down").addEventListener("click", () => {
+    leftControls.querySelector(".move-down").addEventListener("click", async () => {
       if (idx === cat.items.length - 1) return;
       [cat.items[idx + 1], cat.items[idx]] = [cat.items[idx], cat.items[idx + 1]];
-      persist(); render();
+      await DataStore.reorderItems(cat.items.map((it) => it.id));
+      await reload();
     });
     tile.appendChild(leftControls);
 
@@ -246,23 +203,24 @@
       <div class="move-menu">
         <button class="btn-icon move-toggle" title="More">&#8942;</button>
         <div class="move-menu-list ${openMoveMenuId === item.id ? "open" : ""}">
-          ${restaurant.categories.filter((c) => c.id !== cat.id).map((c) => `<button data-target-cat="${c.id}">Move to ${c.name}</button>`).join("")}
+          ${categories.filter((c) => c.id !== cat.id).map((c) => `<button data-target-cat="${c.id}">Move to ${c.name}</button>`).join("")}
         </div>
       </div>
     `;
-    rightControls.querySelector(".remove-item")?.addEventListener("click", () => {
+    rightControls.querySelector(".remove-item")?.addEventListener("click", async () => {
       if (!confirm(`Delete "${item.name}"?`)) return;
-      cat.items.splice(idx, 1);
-      persist(); render();
+      await DataStore.deleteItem(item.id);
+      await reload();
     });
-    rightControls.querySelector(".edit-item").addEventListener("click", () => {
+    rightControls.querySelector(".edit-item").addEventListener("click", async () => {
       if (isEditing) {
-        saveTileEdits(tile, cat, item);
+        await saveTileEdits(tile, item);
         editingItemId = null;
+        await reload();
       } else {
         editingItemId = item.id;
+        render();
       }
-      persist(); render();
     });
     rightControls.querySelector(".move-toggle").addEventListener("click", (e) => {
       e.stopPropagation();
@@ -270,12 +228,11 @@
       render();
     });
     rightControls.querySelectorAll("[data-target-cat]").forEach((btn) => {
-      btn.addEventListener("click", () => {
+      btn.addEventListener("click", async () => {
         const targetCat = findCategory(btn.dataset.targetCat);
-        cat.items.splice(idx, 1);
-        targetCat.items.push(item);
         openMoveMenuId = null;
-        persist(); render();
+        await DataStore.moveItemToCategory(item.id, targetCat.id, targetCat.items.length);
+        await reload();
       });
     });
     tile.appendChild(rightControls);
@@ -330,16 +287,20 @@
     });
     editFields.querySelector(".tile-img-edit").addEventListener("click", () => {
       const input = document.getElementById("hidden-image-input");
-      input.onchange = () => {
+      input.onchange = async () => {
         const file = input.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-          item.image = ev.target.result;
-          persist(); render();
-        };
-        reader.readAsDataURL(file);
         input.value = "";
+        if (!file) return;
+        const imgWrap = editFields.querySelector(".tile-img-wrap img");
+        imgWrap.style.opacity = "0.4";
+        try {
+          const url = await DataStore.uploadImage("dish-images", file, restaurantId);
+          await DataStore.updateItem(item.id, { image: url });
+          await reload();
+        } catch (err) {
+          alert("Couldn't upload that image — please try a different file.");
+          imgWrap.style.opacity = "1";
+        }
       };
       input.click();
     });
@@ -348,57 +309,127 @@
     return tile;
   }
 
-  function saveTileEdits(tile, cat, item) {
+  async function saveTileEdits(tile, item) {
+    const fields = {};
     const name = tile.querySelector(`[data-edit-name="${item.id}"]`).value.trim();
-    if (name) item.name = name;
+    if (name) fields.name = name;
     const hasSizes = tile.querySelector(".sizes-toggle").checked;
     if (hasSizes) {
-      item.sizes = {
+      fields.sizes = {
         S: tile.querySelector(".edit-size-s").value || "0",
         M: tile.querySelector(".edit-size-m").value || "0",
         L: tile.querySelector(".edit-size-l").value || "0"
       };
-      delete item.price;
+      fields.price = null;
     } else {
-      item.price = tile.querySelector(".edit-price").value || "0";
-      delete item.sizes;
+      fields.price = tile.querySelector(".edit-price").value || "0";
+      fields.sizes = null;
     }
-    item.description = tile.querySelector(".edit-desc").value.trim();
+    fields.description = tile.querySelector(".edit-desc").value.trim();
+    await DataStore.updateItem(item.id, fields);
   }
 
-  // Toolbar-level "+ Add new dish" button — lets you add a dish without
-  // scrolling to find its category, and can create a brand-new category
-  // on the fly if none exist yet.
-  document.getElementById("add-dish-btn").addEventListener("click", (e) => {
-    e.stopPropagation();
-    if (restaurant.categories.length === 0) {
-      const name = prompt("You'll need a category first. Name your first category:");
-      if (!name || !name.trim()) return;
-      const newCat = { id: makeId("cat"), name: name.trim(), items: [] };
-      restaurant.categories.push(newCat);
-      addDishToCategory(newCat);
+  // ---------------------------------------------------------------- publish
+
+  async function refreshPublishStatus() {
+    const publishBtn = document.getElementById("publish-btn");
+    const publishPill = document.getElementById("publish-status-pill");
+    if (categories.length === 0) {
+      publishPill.textContent = "Nothing to publish yet";
+      publishPill.classList.remove("is-admin");
+      publishBtn.disabled = true;
+      publishBtn.textContent = "Publish";
       return;
     }
-    if (restaurant.categories.length === 1) {
-      addDishToCategory(restaurant.categories[0]);
+    const unpublished = !menusAreEqual(categories, restaurant.published_menu);
+    if (unpublished) {
+      publishPill.textContent = "Draft changes";
+      publishPill.classList.add("is-admin");
+      publishBtn.disabled = false;
+      publishBtn.textContent = "Publish changes";
+    } else {
+      publishPill.textContent = "Live ✓";
+      publishPill.classList.remove("is-admin");
+      publishBtn.disabled = true;
+      publishBtn.textContent = "Published";
+    }
+  }
+
+  // ---------------------------------------------------------------- init
+
+  (async function init() {
+    const profile = await Auth.requireProfile();
+    if (!profile) return;
+    if (profile.role === "restaurant" && profile.restaurant_id !== restaurantId) {
+      window.location.href = `restaurant-dashboard.html?r=${profile.restaurant_id}`;
       return;
     }
-    addDishMenuOpen = !addDishMenuOpen;
-    render();
-  });
 
-  // Close any open "move to category" or "add new dish" menu when clicking elsewhere.
-  document.addEventListener("click", (e) => {
-    if (openMoveMenuId && !e.target.closest(".move-menu")) {
-      openMoveMenuId = null;
-      render();
+    restaurant = await DataStore.getRestaurant(restaurantId);
+    if (!restaurant) {
+      document.querySelector("main").innerHTML = "<p>Unknown restaurant.</p>";
+      return;
     }
-    if (addDishMenuOpen && !e.target.closest("#add-dish-menu")) {
-      addDishMenuOpen = false;
-      render();
-    }
-  });
 
-  render();
-  refreshPublishStatus();
+    document.getElementById("brand-name").textContent = restaurant.name;
+    document.getElementById("editor-title").textContent = `${restaurant.name} — menu editor`;
+    document.getElementById("preview-link").href = `menu-view.html?r=${restaurantId}&preview=1`;
+    document.getElementById("back-link").href =
+      role === "admin" ? "admin-dashboard.html" : `restaurant-dashboard.html?r=${restaurantId}`;
+    const rolePill = document.getElementById("role-pill");
+    rolePill.textContent = role === "admin" ? "Admin — full access" : "Restaurant owner";
+    if (role === "admin") rolePill.classList.add("is-admin");
+
+    const themeCard = document.getElementById("theme-card");
+    document.getElementById("theme-toggle-btn").addEventListener("click", () => {
+      themeCard.classList.toggle("hidden");
+    });
+    const initialThemeState = restaurant.theme || Theme.defaultState();
+    Theme.applyVars(initialThemeState.vars);
+    mountThemePanel(document.getElementById("theme-panel"), restaurantId, restaurant, initialThemeState, {
+      onChange: (state) => DataStore.updateRestaurantTheme(restaurantId, state)
+    });
+
+    document.getElementById("publish-btn").addEventListener("click", async () => {
+      await DataStore.publish(restaurantId);
+      restaurant.published_menu = categories;
+      await refreshPublishStatus();
+      alert("Your menu is now live — customers will see these changes.");
+    });
+
+    // Toolbar-level "+ Add new dish" button — lets you add a dish without
+    // scrolling to find its category, and can create a brand-new category
+    // on the fly if none exist yet.
+    document.getElementById("add-dish-btn").addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (categories.length === 0) {
+        const name = prompt("You'll need a category first. Name your first category:");
+        if (!name || !name.trim()) return;
+        const newCat = await DataStore.addCategory(restaurantId, name.trim(), 0);
+        categories.push({ id: newCat.id, name: newCat.name, items: [] });
+        await addDishToCategory(findCategory(newCat.id));
+        return;
+      }
+      if (categories.length === 1) {
+        await addDishToCategory(categories[0]);
+        return;
+      }
+      addDishMenuOpen = !addDishMenuOpen;
+      render();
+    });
+
+    // Close any open "move to category" or "add new dish" menu when clicking elsewhere.
+    document.addEventListener("click", (e) => {
+      if (openMoveMenuId && !e.target.closest(".move-menu")) {
+        openMoveMenuId = null;
+        render();
+      }
+      if (addDishMenuOpen && !e.target.closest("#add-dish-menu")) {
+        addDishMenuOpen = false;
+        render();
+      }
+    });
+
+    await reload();
+  })();
 })();

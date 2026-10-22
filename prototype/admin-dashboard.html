@@ -16,14 +16,14 @@
       <a href="admin-dashboard.html" class="active">Dashboard</a>
     </nav>
     <div class="nav-actions">
-      <a href="scan-menu.html?role=admin" class="btn btn-primary btn-sm">+ Scan new menu</a>
-      <a href="login.html" class="btn btn-ghost btn-sm">Log out</a>
+      <button class="btn btn-primary btn-sm" id="new-restaurant-btn">+ Scan new menu</button>
+      <button class="btn btn-ghost btn-sm" id="logout-btn">Log out</button>
     </div>
     <button class="nav-toggle" aria-label="Toggle menu"><span></span><span></span><span></span></button>
   </div>
 </header>
 
-<main class="container dash-header">
+<main class="container dash-header hidden" id="dash-main">
   <div class="dash-title-row">
     <h1>Admin dashboard</h1>
   </div>
@@ -31,15 +31,16 @@
   <div class="dash-grid">
     <div class="card card-pad">
       <h3 style="margin-bottom:14px;">Restaurants &amp; cafes using Infinitum</h3>
+      <p class="muted" id="empty-state" style="font-size:0.88rem;">No restaurants yet — click "+ Scan new menu" above to onboard your first one.</p>
       <ul class="restaurant-list" id="restaurant-list"></ul>
     </div>
 
     <div style="display:flex; flex-direction:column; gap:20px;">
       <div class="card card-pad profile-card">
-        <div class="profile-avatar">A</div>
+        <div class="profile-avatar" id="profile-avatar">A</div>
         <div class="profile-meta">
           <h3>Admin Account</h3>
-          <p class="muted">admin@infinitum.app</p>
+          <p class="muted" id="profile-email">—</p>
         </div>
       </div>
 
@@ -58,8 +59,8 @@
       </div>
 
       <div class="card card-pad">
-        <h3 style="margin-bottom:8px;">About this prototype</h3>
-        <p class="muted" style="font-size:0.85rem;">As admin you can open any restaurant's menu and edit or delete anything. Restaurant owners can edit but cannot delete items — only admins can, for now.</p>
+        <h3 style="margin-bottom:8px;">About this page</h3>
+        <p class="muted" style="font-size:0.85rem;">As admin you can open any restaurant's menu and edit or delete anything. Restaurant owners can edit but cannot delete items — only admins can.</p>
       </div>
     </div>
   </div>
@@ -68,46 +69,89 @@
 <footer class="site-footer">
   <div class="container footer-bottom">
     <span>© <span data-year></span> Infinitum. All rights reserved.</span>
-    <span>Prototype build — not yet connected to a live database.</span>
   </div>
 </footer>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/supabaseClient.js"></script>
+<script src="js/auth.js"></script>
 <script src="js/menuData.js"></script>
 <script src="js/main.js"></script>
 <script>
-  const list = document.getElementById("restaurant-list");
-  const restaurants = DataStore.listRestaurants();
-  let totalItems = 0;
+  function slugify(name) {
+    return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+  }
 
-  restaurants.forEach((r) => {
-    const itemCount = r.categories.reduce((sum, c) => sum + c.items.length, 0);
-    totalItems += itemCount;
-    const statusBadge = r.categories.length === 0
-      ? `<span class="badge" style="background:var(--bg-soft); color:var(--text-muted);">No menu yet</span>`
-      : DataStore.hasUnpublishedChanges(r)
-        ? `<span class="badge">Draft changes</span>`
-        : `<span class="badge" style="background:#e5f3e8; color:#2f6b3a;">Live</span>`;
+  async function uniqueSlug(name, existing) {
+    const base = slugify(name) || "restaurant";
+    let slug = base;
+    let n = 2;
+    const taken = new Set(existing.map((r) => r.slug));
+    while (taken.has(slug)) { slug = `${base}-${n++}`; }
+    return slug;
+  }
 
-    const li = document.createElement("li");
-    li.className = "restaurant-row";
-    li.innerHTML = `
-      <a href="edit-menu.html?r=${r.id}&role=admin">
-        <img class="restaurant-logo" src="${r.logo || DEFAULT_IMAGE}" alt="">
-        <span class="restaurant-info">
-          <strong>${r.name}</strong>
-          <span>${r.plan} · ${r.categories.length} categories · ${itemCount} items · ${statusBadge}</span>
+  (async function init() {
+    const profile = await Auth.requireRole("admin");
+    if (!profile) return;
+
+    document.getElementById("profile-email").textContent = profile.email;
+    document.getElementById("dash-main").classList.remove("hidden");
+
+    document.getElementById("logout-btn").addEventListener("click", async () => {
+      await Auth.signOut();
+      window.location.href = "login.html";
+    });
+
+    const list = document.getElementById("restaurant-list");
+    const restaurants = await DataStore.listRestaurants();
+    document.getElementById("empty-state").classList.toggle("hidden", restaurants.length > 0);
+
+    let totalItems = 0;
+    for (const r of restaurants) {
+      const draft = await DataStore.getDraftMenu(r.id);
+      const itemCount = draft.reduce((sum, c) => sum + c.items.length, 0);
+      totalItems += itemCount;
+      const isLive = menusAreEqual(draft, r.published_menu);
+      const statusBadge = draft.length === 0
+        ? `<span class="badge" style="background:var(--bg-soft); color:var(--text-muted);">No menu yet</span>`
+        : isLive
+          ? `<span class="badge" style="background:#e5f3e8; color:#2f6b3a;">Live</span>`
+          : `<span class="badge">Draft changes</span>`;
+
+      const li = document.createElement("li");
+      li.className = "restaurant-row";
+      li.innerHTML = `
+        <a href="edit-menu.html?r=${r.id}&role=admin">
+          <img class="restaurant-logo" src="${r.logo_url || DEFAULT_IMAGE}" alt="">
+          <span class="restaurant-info">
+            <strong>${r.name}</strong>
+            <span>${r.plan} · ${draft.length} categories · ${itemCount} items · ${statusBadge}</span>
+          </span>
+        </a>
+        <span class="flex gap-8">
+          <a href="scan-menu.html?r=${r.id}&role=admin" class="btn btn-ghost btn-sm">📷 Scan</a>
+          <a href="edit-menu.html?r=${r.id}&role=admin" class="btn btn-ghost btn-sm">Edit menu</a>
         </span>
-      </a>
-      <span class="flex gap-8">
-        <a href="scan-menu.html?r=${r.id}&role=admin" class="btn btn-ghost btn-sm">📷 Scan</a>
-        <a href="edit-menu.html?r=${r.id}&role=admin" class="btn btn-ghost btn-sm">Edit menu</a>
-      </span>
-    `;
-    list.appendChild(li);
-  });
+      `;
+      list.appendChild(li);
+    }
 
-  document.getElementById("stat-restaurants").textContent = restaurants.length;
-  document.getElementById("stat-items").textContent = totalItems;
+    document.getElementById("stat-restaurants").textContent = restaurants.length;
+    document.getElementById("stat-items").textContent = totalItems;
+
+    document.getElementById("new-restaurant-btn").addEventListener("click", async () => {
+      const name = prompt("What's the restaurant or cafe's name?");
+      if (!name || !name.trim()) return;
+      const slug = await uniqueSlug(name, restaurants);
+      try {
+        const restaurant = await DataStore.createRestaurant({ slug, name: name.trim() });
+        window.location.href = `scan-menu.html?r=${restaurant.id}&role=admin`;
+      } catch (err) {
+        alert("Couldn't create that restaurant: " + err.message);
+      }
+    });
+  })();
 </script>
 </body>
 </html>

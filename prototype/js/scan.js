@@ -1,19 +1,18 @@
 /* ==========================================================================
    Infinitum — "Scan new menu" camera flow
    Used by both Admin (onboarding a brand-new restaurant) and restaurant
-   owners (scanning their own paper menu, e.g. right after signing up).
-   Snaps multiple photos, lets you remove any before finishing, then
-   simulates analyzing them into categories/items. Real OCR is a later
-   phase — this wires up the full UX so it can be swapped in without a
-   redesign. Scanned results are merged into the restaurant's *draft* menu
-   only — customers won't see anything until it's Published in the editor.
+   owners (scanning their own paper menu). Snaps multiple photos, lets you
+   remove any before finishing, then simulates analyzing them into
+   categories/items. Real OCR is a later phase — this wires up the full UX
+   so it can be swapped in without a redesign. Scanned results are merged
+   into the restaurant's *draft* menu only — customers won't see anything
+   until it's Published in the editor.
    ========================================================================== */
 
 (function () {
   const params = new URLSearchParams(window.location.search);
-  const restaurantId = params.get("r"); // absent = admin onboarding a brand-new restaurant
+  const restaurantId = params.get("r");
   const role = params.get("role") === "admin" ? "admin" : "restaurant";
-  const restaurant = restaurantId ? DataStore.getRestaurant(restaurantId) : null;
 
   const video = document.getElementById("camera-video");
   const placeholder = document.getElementById("camera-placeholder");
@@ -25,35 +24,33 @@
   const analyzingOverlay = document.getElementById("analyzing-overlay");
   const cameraStage = document.getElementById("camera-stage");
 
-  if (restaurant) {
-    document.getElementById("brand-name").textContent = restaurant.name;
-    document.getElementById("brand-link").href = `restaurant-dashboard.html?r=${restaurantId}`;
-    document.getElementById("cancel-link").href =
-      role === "admin" ? `edit-menu.html?r=${restaurantId}&role=admin` : `restaurant-dashboard.html?r=${restaurantId}`;
-    document.getElementById("scan-title").textContent = `Scan a menu for ${restaurant.name}`;
-    document.getElementById("scan-subtitle").textContent =
-      "Click as many photos of your paper menu as you need. New dishes are added to your draft menu for you to review — remove any photo with ✕, then press Done.";
-    if (typeof Theme !== "undefined") Theme.ensureTheme(restaurantId, restaurant.logo);
-  }
-
   let stream = null;
-  const shots = []; // data URLs of captured/uploaded photos
+  const shots = []; // { dataUrl, file } for each captured/uploaded photo
 
   function updateDoneState() {
     doneBtn.disabled = shots.length === 0;
   }
 
-  function addShot(dataUrl) {
-    shots.push(dataUrl);
+  function dataUrlToFile(dataUrl, filename) {
+    const [header, base64] = dataUrl.split(",");
+    const mime = header.match(/:(.*?);/)[1];
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return new File([bytes], filename, { type: mime });
+  }
+
+  function addShot(dataUrl, file) {
+    shots.push({ dataUrl, file });
     renderShots();
   }
 
   function renderShots() {
     shotsStrip.innerHTML = "";
-    shots.forEach((src, idx) => {
+    shots.forEach((shot, idx) => {
       const thumb = document.createElement("div");
       thumb.className = "shot-thumb";
-      thumb.innerHTML = `<img src="${src}" alt="Shot ${idx + 1}"><button class="remove-shot" title="Remove">&#10005;</button>`;
+      thumb.innerHTML = `<img src="${shot.dataUrl}" alt="Shot ${idx + 1}"><button class="remove-shot" title="Remove">&#10005;</button>`;
       thumb.querySelector(".remove-shot").addEventListener("click", () => {
         shots.splice(idx, 1);
         renderShots();
@@ -94,81 +91,96 @@
     canvas.width = video.videoWidth || 480;
     canvas.height = video.videoHeight || 640;
     canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
-    addShot(canvas.toDataURL("image/jpeg", 0.85));
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+    addShot(dataUrl, dataUrlToFile(dataUrl, `shot-${Date.now()}.jpg`));
   });
 
   fallbackInput.addEventListener("change", () => {
     Array.from(fallbackInput.files).forEach((file) => {
       const reader = new FileReader();
-      reader.onload = (e) => addShot(e.target.result);
+      reader.onload = (e) => addShot(e.target.result, file);
       reader.readAsDataURL(file);
     });
     fallbackInput.value = "";
   });
 
   // Mock "what OCR would produce" — enough variety to demo the editor.
-  function buildScannedCategories() {
-    const pick = (i) => (shots.length ? shots[i % shots.length] : null);
-    let n = 0;
-    const id = (prefix) => `${prefix}-${Date.now().toString(36)}-${(n++).toString(36)}`;
+  // `images` is a list of already-uploaded Supabase Storage URLs.
+  function buildScannedCategories(images) {
+    const pick = (i) => (images.length ? images[i % images.length] : null);
     return [
       {
-        id: id("cat"),
         name: "Starters",
         items: [
-          { id: id("item"), name: "Paneer Tikka", price: "210", image: pick(0), description: null },
-          { id: id("item"), name: "Garlic Bread", price: "140", image: pick(1), description: null }
+          { name: "Paneer Tikka", price: "210", image: pick(0), description: null },
+          { name: "Garlic Bread", price: "140", image: pick(1), description: null }
         ]
       },
       {
-        id: id("cat"),
         name: "Main Course",
         items: [
-          { id: id("item"), name: "Hakka Noodles", price: "190", image: pick(2), description: null },
-          { id: id("item"), name: "Butter Chicken", price: "320", image: pick(3), description: null }
+          { name: "Hakka Noodles", price: "190", image: pick(2), description: null },
+          { name: "Butter Chicken", price: "320", image: pick(3), description: null }
         ]
       },
       {
-        id: id("cat"),
         name: "Beverages",
         items: [
-          { id: id("item"), name: "Cold Coffee", price: "120", image: pick(4), description: null }
+          { name: "Cold Coffee", price: "120", image: pick(4), description: null }
         ]
       }
     ];
   }
 
-  doneBtn.addEventListener("click", () => {
+  doneBtn.addEventListener("click", async () => {
     if (stream) stream.getTracks().forEach((t) => t.stop());
     cameraStage.classList.add("hidden");
     shotsStrip.classList.add("hidden");
     doneBtn.classList.add("hidden");
     analyzingOverlay.classList.remove("hidden");
 
-    setTimeout(() => {
-      const scanned = buildScannedCategories();
-
-      if (restaurant) {
-        // An existing restaurant (new or established) scanning their own
-        // menu — merge into their draft without touching what's published.
-        DataStore.mergeScannedCategories(restaurant, scanned);
-        DataStore.saveRestaurant(restaurantId, restaurant);
-        window.location.href = `edit-menu.html?r=${restaurantId}&role=${role}`;
-      } else {
-        // Admin onboarding a brand-new restaurant from scratch.
-        const draft = {
-          id: "new-scan-draft",
-          name: "New Menu Draft",
-          plan: "Free plan",
-          logo: null,
-          categories: scanned,
-          publishedCategories: []
-        };
-        localStorage.setItem("infinitum_menu_new-scan-draft", JSON.stringify(draft));
-        window.location.href = "edit-menu.html?r=new-scan-draft&role=admin";
+    try {
+      const uploadedUrls = [];
+      for (const shot of shots) {
+        const url = await DataStore.uploadImage("dish-images", shot.file, restaurantId);
+        uploadedUrls.push(url);
       }
-    }, 1800);
+      const scanned = buildScannedCategories(uploadedUrls);
+      await DataStore.mergeScannedCategories(restaurantId, scanned);
+      window.location.href = `edit-menu.html?r=${restaurantId}&role=${role}`;
+    } catch (err) {
+      alert("Something went wrong analyzing your photos: " + err.message);
+      analyzingOverlay.classList.add("hidden");
+      cameraStage.classList.remove("hidden");
+      shotsStrip.classList.remove("hidden");
+      doneBtn.classList.remove("hidden");
+    }
   });
 
   updateDoneState();
+
+  (async function init() {
+    const profile = await Auth.requireProfile();
+    if (!profile) return;
+    if (profile.role === "restaurant" && profile.restaurant_id !== restaurantId) {
+      window.location.href = `restaurant-dashboard.html?r=${profile.restaurant_id}`;
+      return;
+    }
+
+    const restaurant = await DataStore.getRestaurant(restaurantId);
+    if (!restaurant) {
+      document.querySelector("main").innerHTML = "<p>Unknown restaurant.</p>";
+      return;
+    }
+
+    document.getElementById("brand-name").textContent = restaurant.name;
+    document.getElementById("brand-link").href = `restaurant-dashboard.html?r=${restaurantId}`;
+    document.getElementById("cancel-link").href =
+      role === "admin" ? `edit-menu.html?r=${restaurantId}&role=admin` : `restaurant-dashboard.html?r=${restaurantId}`;
+    document.getElementById("scan-title").textContent = `Scan a menu for ${restaurant.name}`;
+    document.getElementById("scan-subtitle").textContent =
+      "Click as many photos of your paper menu as you need. New dishes are added to your draft menu for you to review — remove any photo with ✕, then press Done.";
+    const themeState = restaurant.theme || Theme.defaultState();
+    Theme.applyVars(themeState.vars);
+  })();
 })();

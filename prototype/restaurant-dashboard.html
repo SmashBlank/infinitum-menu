@@ -21,13 +21,13 @@
     </nav>
     <div class="nav-actions">
       <a href="#" id="edit-menu-link" class="btn btn-primary btn-sm">Edit my menu</a>
-      <a href="login.html" class="btn btn-ghost btn-sm">Log out</a>
+      <button class="btn btn-ghost btn-sm" id="logout-btn">Log out</button>
     </div>
     <button class="nav-toggle" aria-label="Toggle menu"><span></span><span></span><span></span></button>
   </div>
 </header>
 
-<main class="container dash-header">
+<main class="container dash-header hidden" id="dash-main">
   <div class="dash-title-row">
     <h1 id="page-title">Your menu dashboard</h1>
     <a href="#" id="view-menu-link" class="btn btn-outline btn-sm" target="_blank">View public menu ↗</a>
@@ -74,11 +74,6 @@
         <p class="muted" style="font-size:0.85rem;">Upload your logo, pick any color yourself, or fine-tune a shade — this changes the whole look of your public menu page.</p>
         <div id="theme-panel"></div>
       </div>
-
-      <div class="card card-pad">
-        <h3 style="margin-bottom:8px;">Need help?</h3>
-        <p class="muted" style="font-size:0.85rem;">This is a prototype account. Camera-based menu scanning, real billing, and plan upgrades will appear here once the backend is connected.</p>
-      </div>
     </div>
   </div>
 </main>
@@ -86,22 +81,40 @@
 <footer class="site-footer">
   <div class="container footer-bottom">
     <span>© <span data-year></span> Infinitum. All rights reserved.</span>
-    <span>Prototype build — not yet connected to a live database.</span>
   </div>
 </footer>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/supabaseClient.js"></script>
+<script src="js/auth.js"></script>
 <script src="js/menuData.js"></script>
 <script src="js/theme.js"></script>
 <script src="js/themePanel.js"></script>
 <script src="js/main.js"></script>
 <script>
-  const params = new URLSearchParams(window.location.search);
-  const restaurantId = params.get("r") || "green-leaf-cafe";
-  const restaurant = DataStore.getRestaurant(restaurantId);
+  (async function init() {
+    const params = new URLSearchParams(window.location.search);
+    const restaurantId = params.get("r");
 
-  if (!restaurant) {
-    document.querySelector("main").innerHTML = "<p>Unknown restaurant.</p>";
-  } else {
+    const profile = await Auth.requireProfile();
+    if (!profile) return;
+    if (profile.role === "restaurant" && profile.restaurant_id !== restaurantId) {
+      window.location.href = `restaurant-dashboard.html?r=${profile.restaurant_id}`;
+      return;
+    }
+
+    const restaurant = await DataStore.getRestaurant(restaurantId);
+    if (!restaurant) {
+      document.querySelector("main").innerHTML = "<p class='container'>Restaurant not found.</p>";
+      return;
+    }
+    document.getElementById("dash-main").classList.remove("hidden");
+
+    document.getElementById("logout-btn").addEventListener("click", async () => {
+      await Auth.signOut();
+      window.location.href = "login.html";
+    });
+
     document.title = `${restaurant.name} — Infinitum`;
     document.getElementById("page-title").textContent = `${restaurant.name} — menu dashboard`;
     document.getElementById("profile-name").textContent = restaurant.name;
@@ -112,16 +125,17 @@
     document.getElementById("scan-menu-link").href = `scan-menu.html?r=${restaurantId}&role=restaurant`;
     document.getElementById("view-menu-link").href = `menu-view.html?r=${restaurantId}`;
 
-    const itemCount = restaurant.categories.reduce((sum, c) => sum + c.items.length, 0);
-    document.getElementById("stat-categories").textContent = restaurant.categories.length;
+    const draft = await DataStore.getDraftMenu(restaurantId);
+    const itemCount = draft.reduce((sum, c) => sum + c.items.length, 0);
+    document.getElementById("stat-categories").textContent = draft.length;
     document.getElementById("stat-items").textContent = itemCount;
 
     const menuCardDesc = document.getElementById("menu-card-desc");
     const publishStatus = document.getElementById("publish-status");
-    if (restaurant.categories.length === 0) {
+    if (draft.length === 0) {
       menuCardDesc.textContent = "You haven't added any dishes yet. Scan a photo of your paper menu to get started quickly, or build it manually.";
       publishStatus.innerHTML = `<span class="muted">Nothing published yet — customers will see a "menu coming soon" page until you publish.</span>`;
-    } else if (DataStore.hasUnpublishedChanges(restaurant)) {
+    } else if (!menusAreEqual(draft, restaurant.published_menu)) {
       publishStatus.innerHTML = `<span style="color:var(--accent); font-weight:600;">●</span> You have unpublished changes — open the editor and hit <strong>Publish</strong> to make them live.`;
     } else {
       publishStatus.innerHTML = `<span style="color:#2f6b3a; font-weight:600;">●</span> Your menu is live and up to date.`;
@@ -129,26 +143,23 @@
 
     const brandLogoImg = document.getElementById("brand-logo");
     const brandDot = document.getElementById("brand-dot");
-
     function renderBrandLogo() {
-      if (!restaurant.logo) return;
-      brandLogoImg.src = restaurant.logo;
+      if (!restaurant.logo_url) return;
+      brandLogoImg.src = restaurant.logo_url;
       brandLogoImg.style.display = "block";
       brandDot.style.display = "none";
     }
     renderBrandLogo();
 
-    // Load this restaurant's previously saved theme (or derive one from its
-    // seed logo on first visit), then mount the shared logo/color panel.
-    Theme.ensureTheme(restaurantId, restaurant.logo, (vars, hsl) => {
-      mountThemePanel(document.getElementById("theme-panel"), restaurantId, restaurant, { vars, hsl }, {
-        onChange: () => {
-          renderBrandLogo();
-          DataStore.saveRestaurant(restaurantId, restaurant);
-        }
-      });
+    const initialState = restaurant.theme || Theme.defaultState();
+    Theme.applyVars(initialState.vars);
+    mountThemePanel(document.getElementById("theme-panel"), restaurantId, restaurant, initialState, {
+      onChange: (state) => {
+        renderBrandLogo();
+        DataStore.updateRestaurantTheme(restaurantId, state);
+      }
     });
-  }
+  })();
 </script>
 </body>
 </html>

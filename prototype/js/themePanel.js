@@ -4,7 +4,8 @@
    editing on a restaurant's behalf have the same controls). Offers three
    ways to set the theme: upload a logo, pick any color from a palette
    (shades generated automatically), or fine-tune by clicking a specific
-   auto-generated shade of the chosen color.
+   auto-generated shade of the chosen color. Persists to the real database
+   via DataStore — this file only handles the UI + calling onChange.
    ========================================================================== */
 
 function mountThemePanel(container, restaurantId, restaurant, initialState, options = {}) {
@@ -16,6 +17,7 @@ function mountThemePanel(container, restaurantId, restaurant, initialState, opti
       <div>
         <label class="mb-0" style="font-size:0.78rem;">Upload a logo</label>
         <input type="file" accept="image/*" data-role="logo-input">
+        <span class="muted hidden" data-role="logo-status" style="font-size:0.75rem; display:block; margin-top:4px;">Uploading…</span>
       </div>
     </div>
 
@@ -38,6 +40,7 @@ function mountThemePanel(container, restaurantId, restaurant, initialState, opti
 
   const logoPreview = container.querySelector('[data-role="logo-preview"]');
   const logoInput = container.querySelector('[data-role="logo-input"]');
+  const logoStatus = container.querySelector('[data-role="logo-status"]');
   const colorInput = container.querySelector('[data-role="color-input"]');
   const shadeRow = container.querySelector('[data-role="shade-row"]');
   const swatchRow = container.querySelector('[data-role="swatch-row"]');
@@ -46,8 +49,8 @@ function mountThemePanel(container, restaurantId, restaurant, initialState, opti
   let currentHsl = initialState.hsl;
 
   function renderLogoPreview() {
-    logoPreview.innerHTML = restaurant.logo
-      ? `<img src="${restaurant.logo}" alt="Logo">`
+    logoPreview.innerHTML = restaurant.logo_url
+      ? `<img src="${restaurant.logo_url}" alt="Logo">`
       : `<span class="muted" style="font-size:0.72rem;">No logo</span>`;
   }
 
@@ -76,9 +79,8 @@ function mountThemePanel(container, restaurantId, restaurant, initialState, opti
       btn.style.background = hex;
       btn.title = `Shade ${l}%`;
       btn.addEventListener("click", () => {
-        const state = Theme.applyShade(currentHsl, l, restaurantId, (vars) => {
-          renderSwatches(vars);
-        });
+        const state = Theme.applyShade(currentHsl, l);
+        renderSwatches(state.vars);
         renderShadeRow({ ...currentHsl, l });
         onChange(state);
       });
@@ -90,36 +92,42 @@ function mountThemePanel(container, restaurantId, restaurant, initialState, opti
   renderSwatches(initialState.vars);
   renderShadeRow(currentHsl);
 
-  logoInput.addEventListener("change", (e) => {
+  logoInput.addEventListener("change", async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const dataUrl = ev.target.result;
-      restaurant.logo = dataUrl;
+    logoStatus.classList.remove("hidden");
+    logoInput.disabled = true;
+    try {
+      const url = await DataStore.uploadImage("logos", file, restaurantId);
+      await DataStore.updateRestaurantLogo(restaurantId, url);
+      restaurant.logo_url = url;
       renderLogoPreview();
       const img = new Image();
-      img.src = dataUrl;
-      Theme.applyFromImage(img, restaurantId, (vars, hsl) => {
-        renderSwatches(vars);
-        renderShadeRow(hsl);
-        onChange({ vars, hsl, source: "logo" });
+      img.crossOrigin = "anonymous";
+      img.src = url;
+      Theme.applyFromImage(img, (state) => {
+        renderSwatches(state.vars);
+        renderShadeRow(state.hsl);
+        onChange(state);
       });
-    };
-    reader.readAsDataURL(file);
+    } catch (err) {
+      alert("Couldn't upload that image — please try a different file.");
+    } finally {
+      logoStatus.classList.add("hidden");
+      logoInput.disabled = false;
+    }
   });
 
   colorInput.addEventListener("input", (e) => {
-    const state = Theme.applyFromHex(e.target.value, restaurantId, (vars) => {
-      renderSwatches(vars);
-    });
+    const state = Theme.applyFromHex(e.target.value);
+    renderSwatches(state.vars);
     currentHsl = state.hsl;
     renderShadeRow(state.hsl, false);
     onChange(state);
   });
 
   resetBtn.addEventListener("click", () => {
-    const state = Theme.resetToDefault(restaurantId);
+    const state = Theme.resetToDefault();
     renderSwatches(state.vars);
     renderShadeRow(state.hsl);
     onChange(state);

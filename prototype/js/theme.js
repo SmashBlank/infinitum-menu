@@ -1,12 +1,9 @@
 /* ==========================================================================
    Infinitum — logo color theme feature (logo_upl / colorscheme_upl)
-   Three ways a restaurant (or admin, on their behalf) can set the page's
-   "ambience": (1) upload a logo and let us pick a matching color, (2) pick
-   any color from a color palette and have shades generated automatically,
-   or (3) fine-tune by clicking one of several auto-generated shades of that
-   same color. Everything is persisted per restaurant so it survives reloads
-   and is reflected consistently across the dashboard, editor, and the
-   public menu page.
+   Pure color math + DOM application live here. Persisting the chosen theme
+   is the caller's job now (via DataStore.updateRestaurantTheme), since that
+   needs to go to the real database, not localStorage — this module just
+   computes a theme and applies it to the page.
    ========================================================================== */
 
 const Theme = (() => {
@@ -151,106 +148,57 @@ const Theme = (() => {
     return { h, s, l };
   }
 
-  // ---------------------------------------------------------------- apply + persist
+  // ---------------------------------------------------------------- apply (DOM only — no persistence)
 
   function applyVars(vars) {
     const root = document.documentElement.style;
     Object.entries(vars).forEach(([k, v]) => root.setProperty(k, v));
   }
 
-  function storageKey(restaurantId) { return `infinitum_theme_${restaurantId}`; }
-
-  /** Saves the full theme state (not just the CSS vars) so a later page load
-   *  can tell *why* this theme was chosen, instead of re-deriving it from
-   *  the logo every time nothing is explicitly saved. */
-  function saveState(restaurantId, state) {
-    if (!restaurantId) return;
-    localStorage.setItem(storageKey(restaurantId), JSON.stringify(state));
-  }
-
-  function loadState(restaurantId) {
-    if (!restaurantId) return null;
-    const raw = localStorage.getItem(storageKey(restaurantId));
-    if (!raw) return null;
-    try { return JSON.parse(raw); } catch (e) { return null; }
-  }
-
-  function applyAndSave(hsl, restaurantId, source, onDone) {
+  function buildState(hsl, source) {
     const vars = buildThemeFromHsl(hsl);
-    applyVars(vars);
-    const state = { hsl, vars, source };
-    saveState(restaurantId, state);
-    if (onDone) onDone(vars, hsl);
-    return state;
+    return { hsl, vars, source };
   }
 
-  /** Resets to the default warm-neutral theme — and *saves* that choice
-   *  explicitly, so re-visiting the page later doesn't silently re-derive
-   *  a theme from the logo again. */
-  function resetToDefault(restaurantId) {
-    const hsl = hexToHsl(DEFAULT_HEX);
-    applyVars(DEFAULT_VARS);
-    saveState(restaurantId, { hsl, vars: DEFAULT_VARS, source: "default" });
-    return { hsl, vars: DEFAULT_VARS };
+  /** Default warm-neutral theme state (not applied/persisted — caller decides). */
+  function defaultState() {
+    return { hsl: hexToHsl(DEFAULT_HEX), vars: DEFAULT_VARS, source: "default" };
   }
 
-  /**
-   * Main entry point for logo uploads: pass an <img> already loaded in the
-   * DOM (or about to be), a restaurant id to persist the theme against, and
-   * a callback that receives the derived theme vars (or default if the logo
-   * was monochrome).
-   */
-  function applyFromImage(img, restaurantId, onDone) {
+  /** Builds+applies a theme state for a logo <img> (already loaded, or about to load). */
+  function applyFromImage(img, onDone) {
     const run = () => {
       const hsl = samplePalette(img) || hexToHsl(DEFAULT_HEX);
-      applyAndSave(hsl, restaurantId, "logo", onDone);
+      const state = buildState(hsl, "logo");
+      applyVars(state.vars);
+      if (onDone) onDone(state);
     };
     if (img.complete) run();
     else img.onload = run;
   }
 
-  /** Applies a color picked manually (e.g. from an <input type="color">). */
-  function applyFromHex(hex, restaurantId, onDone) {
-    const hsl = hexToHsl(hex);
-    return applyAndSave(hsl, restaurantId, "manual", onDone);
+  /** Builds+applies a theme state for a manually picked color (hex string). */
+  function applyFromHex(hex) {
+    const state = buildState(hexToHsl(hex), "manual");
+    applyVars(state.vars);
+    return state;
   }
 
-  /** Applies one specific shade (same hue/sat, different lightness) chosen
-   *  by clicking a swatch in the shade palette. */
-  function applyShade(baseHsl, lightness, restaurantId, onDone) {
-    const hsl = { h: baseHsl.h, s: baseHsl.s, l: lightness };
-    return applyAndSave(hsl, restaurantId, "manual", onDone);
+  /** Builds+applies one specific shade (same hue/sat, different lightness). */
+  function applyShade(baseHsl, lightness) {
+    const state = buildState({ h: baseHsl.h, s: baseHsl.s, l: lightness }, "manual");
+    applyVars(state.vars);
+    return state;
   }
 
-  /**
-   * Loads the restaurant's saved theme state if one exists (this is the
-   * source of truth once a restaurant has made *any* explicit choice,
-   * including "reset to default"). Only if nothing has ever been saved does
-   * it fall back to deriving a theme from a seed logo, so first-time seed
-   * data still looks branded on first visit.
-   */
-  function ensureTheme(restaurantId, logoSrc, onDone) {
-    const existing = loadState(restaurantId);
-    if (existing) {
-      applyVars(existing.vars);
-      if (onDone) onDone(existing.vars, existing.hsl);
-      return existing;
-    }
-    if (!logoSrc) {
-      const state = resetToDefault(restaurantId);
-      if (onDone) onDone(state.vars, state.hsl);
-      return state;
-    }
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.src = logoSrc;
-    applyFromImage(img, restaurantId, onDone);
-    return null;
+  function resetToDefault() {
+    const state = defaultState();
+    applyVars(state.vars);
+    return state;
   }
 
   return {
-    applyFromImage, applyFromHex, applyShade,
-    ensureTheme, loadState, resetToDefault,
+    applyVars, applyFromImage, applyFromHex, applyShade, resetToDefault, defaultState,
     generateShades, hexToHsl, hslToHex,
     DEFAULT_VARS, DEFAULT_HEX
   };

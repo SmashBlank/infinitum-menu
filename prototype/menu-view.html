@@ -31,14 +31,17 @@
   </div>
 </footer>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/supabaseClient.js"></script>
 <script src="js/menuData.js"></script>
 <script src="js/theme.js"></script>
 <script src="js/main.js"></script>
 <script>
+(async function () {
   const params = new URLSearchParams(window.location.search);
-  const restaurantId = params.get("r") || "green-leaf-cafe";
+  const restaurantId = params.get("r");
   const isPreview = params.get("preview") === "1";
-  const restaurant = DataStore.getRestaurant(restaurantId);
+  const restaurant = restaurantId ? await DataStore.getRestaurant(restaurantId) : null;
 
   if (!restaurant) {
     document.getElementById("menu-sections").innerHTML = "<p class='container'>Menu not found.</p>";
@@ -50,17 +53,18 @@
     if (isPreview) document.getElementById("preview-banner").classList.remove("hidden");
 
     // Apply the color theme derived from this restaurant's logo.
-    Theme.ensureTheme(restaurantId, restaurant.logo);
+    const themeState = restaurant.theme || Theme.defaultState();
+    Theme.applyVars(themeState.vars);
 
-    if (restaurant.logo) {
-      document.getElementById("logo-circle").innerHTML = `<img src="${restaurant.logo}" alt="${restaurant.name} logo">`;
+    if (restaurant.logo_url) {
+      document.getElementById("logo-circle").innerHTML = `<img src="${restaurant.logo_url}" alt="${restaurant.name} logo">`;
     }
 
     const nav = document.getElementById("menu-nav");
     const sections = document.getElementById("menu-sections");
     // Preview mode (used from the editor) shows the working draft; the real
     // public URL only ever shows what's actually been published.
-    const categories = isPreview ? restaurant.categories : restaurant.publishedCategories;
+    const categories = isPreview ? await DataStore.getDraftMenu(restaurantId) : restaurant.published_menu;
 
     if (!categories || categories.length === 0) {
       nav.classList.add("hidden");
@@ -165,6 +169,7 @@
       updateActiveNavLink();
     }
   }
+})();
 </script>
 </body>
 </html>

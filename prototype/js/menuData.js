@@ -1,232 +1,252 @@
 /* ==========================================================================
-   Infinitum — mock data layer
-   Stands in for the real database. Seeds three demo restaurants and a table
-   of generic dish descriptions. Everything is persisted to localStorage so
-   edits made in the editor survive a refresh, the same way they would once
-   this is backed by a real database.
+   Infinitum — data layer (Supabase-backed)
+   Every method that reads or writes restaurant/category/item data talks to
+   the real Postgres database via Supabase, instead of localStorage. Access
+   control is enforced server-side by the Row Level Security policies in
+   supabase/schema.sql — this file just calls the API and shapes the results
+   for the UI code.
    ========================================================================== */
 
 const DEFAULT_IMAGE = "assets/images/default-dish.svg";
 
-// Feature (Default_Descr): generic, ingredient-only descriptions used until
-// a restaurant overrides them with their own (Edit_descr).
-const DEFAULT_DESCRIPTIONS = {
-  "poha": "A light breakfast made with flattened rice.",
-  "masala dosa": "A crisp fermented rice-and-lentil crepe.",
-  "idli": "Steamed, fluffy rice-and-lentil cakes.",
-  "butter naan": "Oven-baked leavened bread brushed with butter.",
-  "paneer tikka": "Marinated cottage cheese, chargrilled.",
-  "margherita pizza": "A classic pizza topped with mozzarella and tomato.",
-  "pasta alfredo": "Pasta tossed in a creamy cheese sauce.",
-  "veg sandwich": "Toasted bread layered with fresh vegetables.",
-  "cold coffee": "Chilled, blended coffee.",
-  "cappuccino": "Espresso topped with steamed milk foam.",
-  "french fries": "Crisp, golden fried potato strips.",
-  "caesar salad": "Crisp lettuce tossed in a classic dressing.",
-  "garlic bread": "Toasted bread topped with garlic butter.",
-  "chole bhature": "Spiced chickpeas served with fried bread.",
-  "pav bhaji": "A spiced mashed-vegetable curry with soft buns.",
-  "butter chicken": "Chicken simmered in a creamy tomato gravy.",
-  "veg manchurian": "Fried vegetable dumplings in a tangy sauce.",
-  "margherita": "A classic pizza topped with mozzarella and tomato.",
-  "hakka noodles": "Stir-fried noodles with vegetables.",
-  "default": "A house favorite, made fresh to order."
+// Feature (Default_Descr) + default photo: generic, ingredient-only
+// descriptions and a representative icon, keyed by dish name. Used until a
+// restaurant overrides them with their own (Edit_descr / Edit_Image). This
+// is intentionally a simple name-match lookup — a dish whose name contains
+// (or exactly matches) one of these keys gets that default automatically.
+const DISH_DEFAULTS = {
+  "poha": { description: "A light breakfast made with flattened rice.", image: "assets/images/dish-rice.svg" },
+  "masala dosa": { description: "A crisp fermented rice-and-lentil crepe.", image: "assets/images/dish-south-indian.svg" },
+  "idli": { description: "Steamed, fluffy rice-and-lentil cakes.", image: "assets/images/dish-south-indian.svg" },
+  "butter naan": { description: "Oven-baked leavened bread brushed with butter.", image: "assets/images/dish-bread.svg" },
+  "naan": { description: "Oven-baked leavened bread.", image: "assets/images/dish-bread.svg" },
+  "paneer tikka": { description: "Marinated cottage cheese, chargrilled.", image: "assets/images/dish-curry-bowl.svg" },
+  "margherita": { description: "A classic pizza topped with mozzarella and tomato.", image: "assets/images/dish-pizza.svg" },
+  "pizza": { description: "A classic pizza, baked fresh.", image: "assets/images/dish-pizza.svg" },
+  "pasta": { description: "Pasta tossed in a savory sauce.", image: "assets/images/dish-pasta.svg" },
+  "sandwich": { description: "Toasted bread layered with fresh fillings.", image: "assets/images/dish-sandwich.svg" },
+  "cold coffee": { description: "Chilled, blended coffee.", image: "assets/images/dish-cold-beverage.svg" },
+  "cappuccino": { description: "Espresso topped with steamed milk foam.", image: "assets/images/dish-hot-beverage.svg" },
+  "coffee": { description: "Freshly brewed coffee.", image: "assets/images/dish-hot-beverage.svg" },
+  "tea": { description: "Freshly brewed tea.", image: "assets/images/dish-hot-beverage.svg" },
+  "french fries": { description: "Crisp, golden fried potato strips.", image: "assets/images/dish-fried-snack.svg" },
+  "fries": { description: "Crisp, golden fried potato strips.", image: "assets/images/dish-fried-snack.svg" },
+  "caesar salad": { description: "Crisp lettuce tossed in a classic dressing.", image: "assets/images/dish-salad.svg" },
+  "salad": { description: "A fresh, crisp salad.", image: "assets/images/dish-salad.svg" },
+  "garlic bread": { description: "Toasted bread topped with garlic butter.", image: "assets/images/dish-bread.svg" },
+  "chole bhature": { description: "Spiced chickpeas served with fried bread.", image: "assets/images/dish-curry-bowl.svg" },
+  "pav bhaji": { description: "A spiced mashed-vegetable curry with soft buns.", image: "assets/images/dish-curry-bowl.svg" },
+  "butter chicken": { description: "Chicken simmered in a creamy tomato gravy.", image: "assets/images/dish-curry-bowl.svg" },
+  "veg manchurian": { description: "Fried vegetable dumplings in a tangy sauce.", image: "assets/images/dish-pasta.svg" },
+  "hakka noodles": { description: "Stir-fried noodles with vegetables.", image: "assets/images/dish-pasta.svg" },
+  "noodles": { description: "Stir-fried noodles.", image: "assets/images/dish-pasta.svg" },
+  "default": { description: "A house favorite, made fresh to order.", image: DEFAULT_IMAGE }
 };
 
-function lookupDefaultDescription(name) {
+function lookupDishDefault(name) {
   const key = (name || "").trim().toLowerCase();
-  return DEFAULT_DESCRIPTIONS[key] || DEFAULT_DESCRIPTIONS.default;
+  if (DISH_DEFAULTS[key]) return DISH_DEFAULTS[key];
+  // Fall back to a partial match (e.g. "Margherita Pizza" still matches "margherita").
+  const partial = Object.keys(DISH_DEFAULTS).find((k) => k !== "default" && key.includes(k));
+  return partial ? DISH_DEFAULTS[partial] : DISH_DEFAULTS.default;
 }
 
-// Seed data — acts as "what's already in the database" for the demo.
-// `publishedCategories` is what customers currently see; `categories` is the
-// working draft being edited. They start identical for these seed
-// restaurants (as if already live) except for the brand-new one below.
-const SEED_RESTAURANTS = {
-  "green-leaf-cafe": {
-    id: "green-leaf-cafe",
-    name: "Green Leaf Cafe",
-    plan: "Free plan",
-    logo: "assets/logos/green-leaf-cafe.svg",
-    categories: [
-      {
-        id: "cat-breakfast",
-        name: "Breakfast",
-        items: [
-          { id: "i1", name: "Poha", price: "60", image: null, description: null },
-          { id: "i2", name: "Masala Dosa", price: "90", image: null, description: null },
-          { id: "i3", name: "Idli (4 pcs)", price: "70", image: null, description: "Soft steamed idlis served with chutney and sambar." }
-        ]
-      },
-      {
-        id: "cat-beverages",
-        name: "Beverages",
-        items: [
-          { id: "i4", name: "Cold Coffee", price: "120", image: null, description: null },
-          { id: "i5", name: "Cappuccino", price: "110", image: null, description: null }
-        ]
-      },
-      {
-        id: "cat-sandwiches",
-        name: "Sandwiches",
-        items: [
-          { id: "i6", name: "Veg Sandwich", price: "100", image: null, description: null }
-        ]
-      }
-    ]
-  },
-  "spice-route": {
-    id: "spice-route",
-    name: "Spice Route",
-    plan: "Pro plan",
-    logo: "assets/logos/spice-route.svg",
-    categories: [
-      {
-        id: "cat-starters",
-        name: "Starters",
-        items: [
-          { id: "i7", name: "Paneer Tikka", price: "220", image: null, description: null },
-          { id: "i8", name: "Veg Manchurian", price: "190", image: null, description: null }
-        ]
-      },
-      {
-        id: "cat-mains",
-        name: "Main Course",
-        items: [
-          { id: "i9", name: "Butter Chicken", price: "320", image: null, description: null },
-          { id: "i10", name: "Chole Bhature", price: "150", image: null, description: null }
-        ]
-      },
-      {
-        id: "cat-breads",
-        name: "Breads",
-        items: [
-          { id: "i11", name: "Butter Naan", price: "45", image: null, description: null }
-        ]
-      }
-    ]
-  },
-  "blue-wave-pizza": {
-    id: "blue-wave-pizza",
-    name: "Blue Wave Pizzeria",
-    plan: "Pro plan",
-    logo: "assets/logos/blue-wave-pizza.svg",
-    categories: [
-      {
-        id: "cat-pizza",
-        name: "Pizza",
-        items: [
-          {
-            id: "i12", name: "Margherita", image: null, description: null,
-            sizes: { S: "199", M: "349", L: "499" }
-          },
-          {
-            id: "i13", name: "Farmhouse", image: null, description: "A veggie-loaded pizza with garden-fresh toppings.",
-            sizes: { S: "249", M: "399", L: "549" }
-          }
-        ]
-      },
-      {
-        id: "cat-pasta",
-        name: "Pasta",
-        items: [
-          { id: "i14", name: "Pasta Alfredo", price: "230", image: null, description: null }
-        ]
-      },
-      {
-        id: "cat-drinks",
-        name: "Drinks",
-        items: [
-          { id: "i15", name: "French Fries", price: "130", image: null, description: null }
-        ]
-      }
-    ]
-  },
-  // A brand-new, just-onboarded restaurant with no menu yet — demonstrates
-  // the "scan your first menu" flow for a restaurant that has nothing live.
-  "fresh-bites-diner": {
-    id: "fresh-bites-diner",
-    name: "Fresh Bites Diner",
-    plan: "Free plan",
-    logo: null,
-    categories: [],
-    publishedCategories: []
+// Postgres JSONB columns don't preserve object-key insertion order, so a
+// freshly-built draft (keys in a fixed JS order) can come back from
+// `published_menu` with keys reordered even when the data is identical.
+// Sorting keys recursively before stringifying makes the comparison
+// actually reflect whether the content changed, not just key order.
+function stableStringify(value) {
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+  if (value && typeof value === "object") {
+    const keys = Object.keys(value).sort();
+    return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(value[k])}`).join(",")}}`;
   }
-};
+  return JSON.stringify(value);
+}
+
+function menusAreEqual(a, b) {
+  return stableStringify(a || []) === stableStringify(b || []);
+}
 
 const DataStore = {
-  _storageKey(id) { return `infinitum_menu_${id}`; },
+  // ---------------------------------------------------------------- restaurants
 
-  listRestaurants() {
-    return Object.keys(SEED_RESTAURANTS).map((id) => this.getRestaurant(id));
+  async listRestaurants() {
+    const { data, error } = await sb.from("restaurants").select("*").order("created_at");
+    if (error) throw error;
+    return data;
   },
 
-  getRestaurant(id) {
-    const raw = localStorage.getItem(this._storageKey(id));
-    if (raw) {
-      try {
-        const data = JSON.parse(raw);
-        // Older saved sessions won't have a `publishedCategories` field yet —
-        // treat whatever they already had as already-published.
-        if (!data.publishedCategories) data.publishedCategories = JSON.parse(JSON.stringify(data.categories));
-        return data;
-      } catch (e) { /* fall through to seed */ }
-    }
-    const seed = SEED_RESTAURANTS[id];
-    if (!seed) return null;
-    const clone = JSON.parse(JSON.stringify(seed));
-    if (!clone.publishedCategories) clone.publishedCategories = JSON.parse(JSON.stringify(clone.categories));
-    this.saveRestaurant(id, clone);
-    return clone;
+  async getRestaurant(id) {
+    const { data, error } = await sb.from("restaurants").select("*").eq("id", id).single();
+    if (error) return null;
+    return data;
   },
 
-  saveRestaurant(id, data) {
-    localStorage.setItem(this._storageKey(id), JSON.stringify(data));
+  async createRestaurant({ slug, name, plan }) {
+    const { data, error } = await sb.from("restaurants")
+      .insert({ slug, name, plan: plan || "Free plan" })
+      .select().single();
+    if (error) throw error;
+    return data;
   },
 
-  resetRestaurant(id) {
-    localStorage.removeItem(this._storageKey(id));
-    return this.getRestaurant(id);
+  async updateRestaurantTheme(id, themeState) {
+    const { error } = await sb.from("restaurants").update({ theme: themeState }).eq("id", id);
+    if (error) throw error;
   },
 
-  /** Copies the current working draft live, so customers can see it. */
-  publish(id) {
-    const restaurant = this.getRestaurant(id);
-    if (!restaurant) return null;
-    restaurant.publishedCategories = JSON.parse(JSON.stringify(restaurant.categories));
-    this.saveRestaurant(id, restaurant);
-    return restaurant;
+  async updateRestaurantLogo(id, logoUrl) {
+    const { error } = await sb.from("restaurants").update({ logo_url: logoUrl }).eq("id", id);
+    if (error) throw error;
   },
 
-  hasUnpublishedChanges(restaurant) {
-    return JSON.stringify(restaurant.categories) !== JSON.stringify(restaurant.publishedCategories);
+  // ---------------------------------------------------------------- categories + items (draft)
+
+  /** Returns the restaurant's draft menu as [{ id, name, items: [...] }], sorted. */
+  async getDraftMenu(restaurantId) {
+    const { data: categories, error: catErr } = await sb.from("categories")
+      .select("*").eq("restaurant_id", restaurantId).order("sort_order");
+    if (catErr) throw catErr;
+    if (categories.length === 0) return [];
+
+    const { data: items, error: itemErr } = await sb.from("items")
+      .select("*").in("category_id", categories.map((c) => c.id)).order("sort_order");
+    if (itemErr) throw itemErr;
+
+    return categories.map((cat) => ({
+      id: cat.id,
+      name: cat.name,
+      items: items.filter((it) => it.category_id === cat.id).map((it) => ({
+        id: it.id,
+        name: it.name,
+        price: it.price,
+        sizes: it.sizes,
+        image: it.image_url,
+        description: it.description
+      }))
+    }));
   },
+
+  async addCategory(restaurantId, name, sortOrder) {
+    const { data, error } = await sb.from("categories")
+      .insert({ restaurant_id: restaurantId, name, sort_order: sortOrder })
+      .select().single();
+    if (error) throw error;
+    return data;
+  },
+
+  async renameCategory(categoryId, name) {
+    const { error } = await sb.from("categories").update({ name }).eq("id", categoryId);
+    if (error) throw error;
+  },
+
+  async deleteCategory(categoryId) {
+    const { error } = await sb.from("categories").delete().eq("id", categoryId);
+    if (error) throw error;
+  },
+
+  async reorderCategories(orderedIds) {
+    await Promise.all(orderedIds.map((id, idx) =>
+      sb.from("categories").update({ sort_order: idx }).eq("id", id)
+    ));
+  },
+
+  async addItem(categoryId, fields, sortOrder) {
+    const { data, error } = await sb.from("items").insert({
+      category_id: categoryId,
+      name: fields.name,
+      price: fields.price ?? null,
+      sizes: fields.sizes ?? null,
+      image_url: fields.image ?? null,
+      description: fields.description ?? null,
+      sort_order: sortOrder
+    }).select().single();
+    if (error) throw error;
+    return data;
+  },
+
+  async updateItem(itemId, fields) {
+    const payload = {};
+    if ("name" in fields) payload.name = fields.name;
+    if ("price" in fields) payload.price = fields.price;
+    if ("sizes" in fields) payload.sizes = fields.sizes;
+    if ("image" in fields) payload.image_url = fields.image;
+    if ("description" in fields) payload.description = fields.description;
+    const { error } = await sb.from("items").update(payload).eq("id", itemId);
+    if (error) throw error;
+  },
+
+  async deleteItem(itemId) {
+    const { error } = await sb.from("items").delete().eq("id", itemId);
+    if (error) throw error;
+  },
+
+  async moveItemToCategory(itemId, newCategoryId, sortOrder) {
+    const { error } = await sb.from("items")
+      .update({ category_id: newCategoryId, sort_order: sortOrder }).eq("id", itemId);
+    if (error) throw error;
+  },
+
+  async reorderItems(orderedIds) {
+    await Promise.all(orderedIds.map((id, idx) =>
+      sb.from("items").update({ sort_order: idx }).eq("id", id)
+    ));
+  },
+
+  // ---------------------------------------------------------------- publish
+
+  async publish(restaurantId) {
+    const draft = await this.getDraftMenu(restaurantId);
+    const { error } = await sb.from("restaurants")
+      .update({ published_menu: draft }).eq("id", restaurantId);
+    if (error) throw error;
+    return draft;
+  },
+
+  async hasUnpublishedChanges(restaurant) {
+    const draft = await this.getDraftMenu(restaurant.id);
+    return !menusAreEqual(draft, restaurant.published_menu);
+  },
+
+  // ---------------------------------------------------------------- storage uploads
+
+  async uploadImage(bucket, file, restaurantId) {
+    const ext = file.name.split(".").pop();
+    const path = `${restaurantId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const { error } = await sb.storage.from(bucket).upload(path, file);
+    if (error) throw error;
+    const { data } = sb.storage.from(bucket).getPublicUrl(path);
+    return data.publicUrl;
+  },
+
+  // ---------------------------------------------------------------- scanning helper
 
   /** Merges freshly-scanned categories/items into a restaurant's draft menu,
-   *  matching by category name (case-insensitive) instead of overwriting,
-   *  so scanning never wipes out dishes that are already there. */
-  mergeScannedCategories(restaurant, scannedCategories) {
-    scannedCategories.forEach((scanned) => {
-      const existing = restaurant.categories.find(
-        (c) => c.name.trim().toLowerCase() === scanned.name.trim().toLowerCase()
-      );
-      if (existing) {
-        existing.items.push(...scanned.items);
-      } else {
-        restaurant.categories.push(scanned);
+   *  matching by category name (case-insensitive) instead of overwriting. */
+  async mergeScannedCategories(restaurantId, scannedCategories) {
+    const existing = await this.getDraftMenu(restaurantId);
+    for (const scanned of scannedCategories) {
+      const match = existing.find((c) => c.name.trim().toLowerCase() === scanned.name.trim().toLowerCase());
+      const category = match ? { id: match.id } : await this.addCategory(restaurantId, scanned.name, existing.length);
+      let sortOrder = match ? match.items.length : 0;
+      for (const item of scanned.items) {
+        await this.addItem(category.id, item, sortOrder++);
       }
-    });
-    return restaurant;
+    }
   },
+
+  // ---------------------------------------------------------------- display helpers (pure, no DB)
 
   resolvedDescription(item) {
     return item.description && item.description.trim()
       ? item.description
-      : lookupDefaultDescription(item.name);
+      : lookupDishDefault(item.name).description;
   },
 
   resolvedImage(item) {
-    return item.image || DEFAULT_IMAGE;
+    return item.image || lookupDishDefault(item.name).image;
   },
 
   formatPrice(item) {
@@ -239,3 +259,4 @@ const DataStore = {
 
 window.DataStore = DataStore;
 window.DEFAULT_IMAGE = DEFAULT_IMAGE;
+window.menusAreEqual = menusAreEqual;

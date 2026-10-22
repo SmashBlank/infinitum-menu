@@ -22,80 +22,70 @@
 
 <main class="auth-wrap">
   <div class="card auth-card">
-    <div class="role-toggle">
-      <button type="button" class="active" data-role="restaurant">Restaurant login</button>
-      <button type="button" data-role="admin">Admin login</button>
-    </div>
+    <h1 style="font-size:1.3rem; margin-bottom:18px;">Log in to Infinitum</h1>
 
-    <form id="restaurant-form">
+    <form id="login-form">
       <div class="field">
-        <label for="r-select">Choose your restaurant (demo)</label>
-        <select id="r-select">
-          <option value="green-leaf-cafe">Green Leaf Cafe</option>
-          <option value="spice-route">Spice Route</option>
-          <option value="blue-wave-pizza">Blue Wave Pizzeria</option>
-          <option value="fresh-bites-diner">Fresh Bites Diner (brand-new, no menu yet)</option>
-        </select>
+        <label for="email">Email</label>
+        <input type="email" id="email" placeholder="you@example.com" required>
       </div>
       <div class="field">
-        <label for="r-email">Email</label>
-        <input type="email" id="r-email" placeholder="owner@yourcafe.com" value="owner@demo.com">
+        <label for="password">Password</label>
+        <input type="password" id="password" placeholder="••••••••" required>
       </div>
-      <div class="field">
-        <label for="r-pass">Password</label>
-        <input type="password" id="r-pass" placeholder="••••••••" value="demo1234">
-      </div>
-      <button type="submit" class="btn btn-primary" style="width:100%;">Log in to my menu</button>
+      <p class="muted hidden" id="login-error" style="color:var(--danger); font-size:0.85rem;"></p>
+      <button type="submit" class="btn btn-primary" style="width:100%;" id="login-btn">Log in</button>
     </form>
 
-    <form id="admin-form" class="hidden">
-      <div class="field">
-        <label for="a-email">Admin email</label>
-        <input type="email" id="a-email" placeholder="admin@infinitum.app" value="admin@infinitum.app">
-      </div>
-      <div class="field">
-        <label for="a-pass">Password</label>
-        <input type="password" id="a-pass" placeholder="••••••••" value="admin1234">
-      </div>
-      <button type="submit" class="btn btn-primary" style="width:100%;">Log in as admin</button>
-    </form>
-
-    <p class="demo-note">This is a design prototype — any email/password works. Real sign-in with proper passwords will be added when we connect a database (see <code>login.html</code> notes for the team).</p>
+    <p class="demo-note">Admin accounts and restaurant accounts are both created from the admin dashboard (or directly in Supabase) — there's no public sign-up page, by design.</p>
   </div>
 </main>
 
 <footer class="site-footer">
   <div class="container footer-bottom">
     <span>© <span data-year></span> Infinitum. All rights reserved.</span>
-    <span>Prototype build — not yet connected to a live database.</span>
   </div>
 </footer>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/supabaseClient.js"></script>
+<script src="js/auth.js"></script>
 <script src="js/main.js"></script>
 <script>
-  const restaurantForm = document.getElementById("restaurant-form");
-  const adminForm = document.getElementById("admin-form");
-  const toggleButtons = document.querySelectorAll(".role-toggle button");
+  const form = document.getElementById("login-form");
+  const errorEl = document.getElementById("login-error");
+  const loginBtn = document.getElementById("login-btn");
 
-  toggleButtons.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      toggleButtons.forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
-      const isAdmin = btn.dataset.role === "admin";
-      adminForm.classList.toggle("hidden", !isAdmin);
-      restaurantForm.classList.toggle("hidden", isAdmin);
-    });
-  });
-
-  restaurantForm.addEventListener("submit", (e) => {
+  form.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const id = document.getElementById("r-select").value;
-    window.location.href = `restaurant-dashboard.html?r=${id}`;
-  });
+    errorEl.classList.add("hidden");
+    loginBtn.disabled = true;
+    loginBtn.textContent = "Logging in…";
 
-  adminForm.addEventListener("submit", (e) => {
-    e.preventDefault();
-    window.location.href = "admin-dashboard.html";
+    const email = document.getElementById("email").value.trim();
+    const password = document.getElementById("password").value;
+
+    const { error } = await Auth.signIn(email, password);
+    if (error) {
+      errorEl.textContent = error.message || "Couldn't log in — check your email and password.";
+      errorEl.classList.remove("hidden");
+      loginBtn.disabled = false;
+      loginBtn.textContent = "Log in";
+      return;
+    }
+
+    const profile = await Auth.getProfile();
+    if (!profile) {
+      errorEl.textContent = "Your account isn't set up yet — ask an admin to finish setting up your profile.";
+      errorEl.classList.remove("hidden");
+      loginBtn.disabled = false;
+      loginBtn.textContent = "Log in";
+      return;
+    }
+
+    window.location.href = profile.role === "admin"
+      ? "admin-dashboard.html"
+      : `restaurant-dashboard.html?r=${profile.restaurant_id}`;
   });
 </script>
 </body>
